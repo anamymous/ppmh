@@ -1,0 +1,2259 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#047857">
+    <title>Kalkulatore Berkah Laundry - Firebase Edition</title>
+
+    <!-- PWA & Offline Cache Fallback Script -->
+    <script>
+        window.addEventListener('error', function(e) {
+            if (e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK') {
+                console.warn('File CDN tidak dapat dijangkau (Mode Offline Aktif)');
+            }
+        }, true);
+    </script>
+
+    <!-- Tailwind CSS & Lucide Icons -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Chart.js untuk Grafik Dashboard -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- Library Konversi Struk ke PNG -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <!-- FIREBASE SDK (v10 Web Compat) -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+    <style>
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            #areaNotaPrint, #areaNotaPrint *, #areaNotaRekapPrint, #areaNotaRekapPrint * {
+                visibility: visible;
+            }
+            #areaNotaPrint, #areaNotaRekapPrint {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body class="bg-slate-100 min-h-screen text-slate-800 font-sans">
+
+    <!-- Header / Navbar -->
+    <header class="bg-emerald-700 text-white shadow-md print:hidden">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <i data-lucide="file-spreadsheet" class="w-8 h-8"></i>
+                <h1 class="text-2xl font-bold tracking-wide">Kalkulatore Berkah Laundry</h1>
+            </div>
+            <div class="flex items-center gap-2">
+                <span id="indikatorSync" class="text-xs bg-emerald-800 px-3 py-1 rounded-full text-emerald-100 flex items-center gap-1 font-semibold">
+                    <i data-lucide="wifi" class="w-4 h-4"></i> Memeriksa Firebase...
+                </span>
+                <button onclick="muatDataFirebase()" class="bg-emerald-800 hover:bg-emerald-900 text-white text-xs px-3 py-1.5 rounded-lg transition flex items-center gap-1">
+                    <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Refresh
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Content Container -->
+    <main class="max-w-7xl mx-auto px-4 py-6 space-y-6 print:hidden">
+
+        <!-- STATUS BAR SINKRONISASI -->
+        <div id="statusBarSync" class="hidden text-xs text-center py-2.5 px-4 rounded-xl font-bold transition shadow-sm"></div>
+
+        <!-- NAVIGASI TAB MENU -->
+        <nav class="flex flex-wrap gap-2 bg-white p-2 rounded-2xl shadow-sm border border-slate-200">
+            <button onclick="gantiTab('dashboard')" id="btnTab-dashboard" 
+                class="tab-btn flex-1 min-w-[120px] py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold transition flex items-center justify-center gap-2 bg-emerald-600 text-white shadow-md">
+                <i data-lucide="layout-dashboard" class="w-4 h-4"></i> Dashboard
+            </button>
+            <button onclick="gantiTab('transaksi')" id="btnTab-transaksi" 
+                class="tab-btn flex-1 min-w-[120px] py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold transition flex items-center justify-center gap-2 text-slate-600 hover:bg-slate-100">
+                <i data-lucide="plus-circle" class="w-4 h-4"></i> Transaksi Baru
+            </button>
+            <button onclick="gantiTab('pengambilan')" id="btnTab-pengambilan" 
+                class="tab-btn flex-1 min-w-[120px] py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold transition flex items-center justify-center gap-2 text-slate-600 hover:bg-slate-100">
+                <i data-lucide="package-check" class="w-4 h-4"></i> Pengambilan
+            </button>
+            <button onclick="gantiTab('laporan')" id="btnTab-laporan" 
+                class="tab-btn flex-1 min-w-[120px] py-2.5 px-4 rounded-xl text-xs sm:text-sm font-bold transition flex items-center justify-center gap-2 text-slate-600 hover:bg-slate-100">
+                <i data-lucide="file-text" class="w-4 h-4"></i> Laporan & Riwayat
+            </button>
+        </nav>
+
+        <!-- TAB 1: DASHBOARD -->
+        <section id="tab-dashboard" class="tab-content space-y-6">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between">
+                    <div>
+                        <span class="text-xs font-semibold uppercase text-slate-400 block">Pendapatan (Lunas)</span>
+                        <span id="statPendapatanLunas" class="text-2xl font-extrabold text-emerald-600">Rp 0</span>
+                    </div>
+                    <div class="p-3 bg-emerald-50 text-emerald-600 rounded-xl">
+                        <i data-lucide="wallet" class="w-7 h-7"></i>
+                    </div>
+                </div>
+
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between">
+                    <div>
+                        <span class="text-xs font-semibold uppercase text-slate-400 block">Belum Lunas (Piutang)</span>
+                        <span id="statBelumLunas" class="text-2xl font-extrabold text-amber-600">Rp 0</span>
+                    </div>
+                    <div class="p-3 bg-amber-50 text-amber-600 rounded-xl">
+                        <i data-lucide="clock" class="w-7 h-7"></i>
+                    </div>
+                </div>
+
+                <div class="bg-white p-5 rounded-2xl shadow-sm border border-slate-200 flex items-center justify-between">
+                    <div>
+                        <span class="text-xs font-semibold uppercase text-slate-400 block">Total Omset</span>
+                        <span id="statTotalOmset" class="text-2xl font-extrabold text-blue-600">Rp 0</span>
+                    </div>
+                    <div class="p-3 bg-blue-50 text-blue-600 rounded-xl">
+                        <i data-lucide="trending-up" class="w-7 h-7"></i>
+                    </div>
+                </div>
+            </div>
+
+            <!-- GRAFIK PELANGGAN TERBANYAK -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-4">
+                <div class="flex items-center justify-between border-b pb-3">
+                    <h2 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                        <i data-lucide="users" class="w-5 h-5 text-emerald-600"></i> Nominal Pembayaran Pelanggan Teratas
+                    </h2>
+                    <span class="text-xs text-slate-400 font-medium">Berdasarkan Total Biaya (Rp)</span>
+                </div>
+                
+                <div class="relative w-full h-64 sm:h-80">
+                    <canvas id="chartPelangganTerbanyak"></canvas>
+                </div>
+            </div>
+
+            <!-- PRIORITAS ANTREAN -->
+            <div class="bg-amber-50/70 border border-amber-200 p-6 rounded-2xl shadow-sm">
+                <div class="flex items-center justify-between border-b border-amber-200 pb-3 mb-3">
+                    <h2 class="text-lg font-bold text-amber-900 flex items-center gap-2">
+                        <i data-lucide="list-ordered" class="w-5 h-5 text-amber-600"></i> Prioritas Penyelesaian Cucian
+                    </h2>
+                    <span id="jumlahAntreanBadge" class="bg-amber-200 text-amber-800 text-xs font-bold px-2.5 py-1 rounded-full">0 Antrean</span>
+                </div>
+                <p class="text-xs text-amber-700 mb-3">Daftar cucian diproses yang diurutkan berdasarkan tanggal estimasi paling mendesak/cepat selesai.</p>
+                <div id="daftarAntreanContainer" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3"></div>
+            </div>
+        </section>
+
+        <!-- TAB 2: TRANSAKSI BARU -->
+        <section id="tab-transaksi" class="tab-content hidden max-w-2xl mx-auto">
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <h2 class="text-lg font-bold text-slate-700 mb-4 flex items-center gap-2 border-b pb-3">
+                    <i data-lucide="plus-circle" class="w-5 h-5 text-emerald-600"></i> Transaksi Baru
+                </h2>
+
+                <form id="laundryForm" class="space-y-4">
+                    <div>
+                        <div class="flex items-center justify-between mb-1">
+                            <label class="block text-xs font-semibold uppercase text-slate-500">Nama Pelanggan *</label>
+                            <div class="flex items-center gap-3">
+                                <button type="button" onclick="bukaModalPelangganBaru()" class="text-xs text-emerald-600 hover:text-emerald-800 font-semibold flex items-center gap-1">
+                                    <i data-lucide="user-plus" class="w-3.5 h-3.5"></i> + Pelanggan
+                                </button>
+                                <button type="button" onclick="bukaModalKelolaPelanggan()" class="text-xs text-rose-600 hover:text-rose-800 font-semibold flex items-center gap-1">
+                                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> Kelola Pelanggan
+                                </button>
+                            </div>
+                        </div>
+                        <select id="selectPelanggan" required class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white transition text-sm font-medium">
+                        </select>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                        <label class="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                            <input type="radio" name="tipeHitung" value="satuan" checked onchange="toggleTipeHitung()" class="text-emerald-600 focus:ring-emerald-500">
+                            <span>👔 Satuan (Pcs)</span>
+                        </label>
+                        <label class="flex items-center gap-2 text-xs font-semibold cursor-pointer">
+                            <input type="radio" name="tipeHitung" value="kiloan" onchange="toggleTipeHitung()" class="text-emerald-600 focus:ring-emerald-500">
+                            <span>🧺 Kiloan (Kg)</span>
+                        </label>
+                    </div>
+
+                    <!-- CONTAINER SATUAN -->
+                    <div id="containerSatuan" class="space-y-3 bg-emerald-50/40 p-3 rounded-xl border border-emerald-200">
+                        <div class="flex flex-wrap items-center justify-between gap-2">
+                            <label class="block text-xs font-semibold uppercase text-slate-500">Daftar Baju / Barang Satuan</label>
+                            <div class="flex items-center gap-2">
+                                <button type="button" onclick="bukaModalLayananKiloan()" class="text-xs text-emerald-700 hover:text-emerald-900 font-bold flex items-center gap-1">
+                                    <i data-lucide="settings" class="w-3.5 h-3.5"></i> ⚙️ Kelola Layanan
+                                </button>
+                                <button type="button" onclick="bukaModalKatalog()" class="text-xs bg-amber-600 hover:bg-amber-700 text-white font-semibold px-2.5 py-1 rounded-lg transition flex items-center gap-1">
+                                    <i data-lucide="tag" class="w-3.5 h-3.5"></i> Katalog
+                                </button>
+                                <button type="button" onclick="tambahBarangSatuan()" class="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-2.5 py-1 rounded-lg transition flex items-center gap-1">
+                                    <i data-lucide="plus" class="w-3.5 h-3.5"></i> Tambah
+                                </button>
+                            </div>
+                        </div>
+                        <div id="listBarangSatuan" class="space-y-2"></div>
+                    </div>
+
+                    <!-- CONTAINER KILOAN -->
+                    <div id="containerKiloan" class="hidden grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="sm:col-span-2 flex justify-end">
+                            <button type="button" onclick="bukaModalLayananKiloan()" class="text-xs text-emerald-700 hover:text-emerald-900 font-bold flex items-center gap-1">
+                                <i data-lucide="settings" class="w-3.5 h-3.5"></i> ⚙️ Kelola Jenis Layanan
+                            </button>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Layanan Kiloan</label>
+                            <select id="layananKiloan" onchange="updateEstimasiDanTotal()" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none bg-white text-sm">
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Berat (Kg)</label>
+                            <input type="number" id="jumlahKg" min="0.1" step="0.1" value="1" oninput="updateEstimasiDanTotal()" class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                        <div>
+                            <label class="block text-xs font-semibold uppercase text-slate-500 mb-1 flex items-center gap-1">
+                                <i data-lucide="calendar" class="w-3.5 h-3.5 text-emerald-600"></i> Tgl Penyerahan
+                            </label>
+                            <input type="date" id="tglMasuk" onchange="hitungEstimasiSelesai()" required class="w-full px-2.5 py-1.5 text-sm border border-slate-300 rounded-lg bg-white focus:outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold uppercase text-slate-500 mb-1 flex items-center gap-1">
+                                <i data-lucide="clock" class="w-3.5 h-3.5 text-emerald-600"></i> Est. Pengambilan
+                            </label>
+                            <input type="date" id="tglAmbil" required class="w-full px-2.5 py-1.5 text-sm border border-slate-300 rounded-lg bg-white focus:outline-none">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Status Pembayaran</label>
+                        <select id="status" class="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white">
+                            <option value="Belum Lunas">Belum Lunas</option>
+                            <option value="Lunas">Lunas</option>
+                        </select>
+                    </div>
+
+                    <div class="bg-emerald-50 p-4 rounded-xl border border-emerald-100 text-center">
+                        <span id="labelRincianLive" class="text-xs text-emerald-700 font-semibold uppercase block">Est. Total Biaya</span>
+                        <span id="totalPreview" class="text-2xl font-extrabold text-emerald-800">Rp 0</span>
+                    </div>
+
+                    <button type="submit" id="btnSimpanTx" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3 rounded-xl shadow-md transition flex items-center justify-center gap-2">
+                        <i data-lucide="save" class="w-5 h-5"></i> Simpan Transaksi Ke Firebase
+                    </button>
+                </form>
+            </div>
+        </section>
+
+        <!-- TAB 3: PENGAMBILAN BARANG -->
+        <section id="tab-pengambilan" class="tab-content hidden max-w-2xl mx-auto space-y-6">
+            <div class="bg-emerald-50/70 border border-emerald-200 p-6 rounded-2xl shadow-sm space-y-5">
+                <h2 class="text-lg font-bold text-emerald-800 flex items-center gap-2 border-b border-emerald-200 pb-3">
+                    <i data-lucide="package-check" class="w-5 h-5 text-emerald-600"></i> Form Pengambilan Cucian
+                </h2>
+
+                <div class="flex gap-2">
+                    <button onclick="setFilterPengambilan('semua')" id="btnFilterAmbil-semua" class="flex-1 py-1.5 px-3 rounded-lg text-xs font-bold bg-emerald-600 text-white shadow-sm">
+                        Semua Ready
+                    </button>
+                    <button onclick="setFilterPengambilan('Lunas')" id="btnFilterAmbil-Lunas" class="flex-1 py-1.5 px-3 rounded-lg text-xs font-bold bg-white text-slate-600 border border-slate-200 hover:bg-slate-50">
+                        ✅ Lunas
+                    </button>
+                    <button onclick="setFilterPengambilan('Belum Lunas')" id="btnFilterAmbil-Belum Lunas" class="flex-1 py-1.5 px-3 rounded-lg text-xs font-bold bg-white text-slate-600 border border-slate-200 hover:bg-slate-50">
+                        ⚠️ Belum Lunas
+                    </button>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Pilih Antrean Pelanggan (Diurutkan Sesuai Jadwal)</label>
+                    <select id="selectPelangganAmbil" onchange="tampilkanDetailPengambilanDropdown()" class="w-full px-3.5 py-2.5 border border-slate-300 rounded-xl bg-white text-sm font-medium">
+                    </select>
+                </div>
+
+                <div id="cardDetailPengambilan" class="hidden bg-white p-4 rounded-xl border border-emerald-200 space-y-3 shadow-sm"></div>
+
+                <div class="border-t border-emerald-200 pt-3">
+                    <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Atau Cari Manual ID / Nama</label>
+                    <input type="text" id="inputCariPengambilan" oninput="cariPengambilan()" placeholder="Ketik nama atau ID transaksi..." class="w-full px-4 py-2 border border-slate-300 rounded-xl bg-white text-sm">
+                </div>
+
+                <div id="hasilPencarianAmbil" class="hidden bg-white p-4 rounded-xl border border-emerald-200 space-y-2 text-sm shadow-sm"></div>
+            </div>
+        </section>
+
+        <!-- TAB 4: LAPORAN & RIWAYAT TRANSAKSI -->
+        <section id="tab-laporan" class="tab-content hidden space-y-6">
+            
+            <!-- AREA REKAP BULANAN TOTAL & PER PELANGGAN -->
+            <div class="bg-emerald-50/80 border border-emerald-200 p-6 rounded-2xl shadow-sm space-y-4">
+                <h2 class="text-lg font-bold text-emerald-900 flex items-center gap-2 border-b border-emerald-200 pb-3">
+                    <i data-lucide="receipt" class="w-5 h-5 text-emerald-600"></i> Rekap Bulanan Struk / Nota
+                </h2>
+                
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Pilih Pelanggan / Total</label>
+                        <select id="rekapPelangganSelect" class="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500 font-medium">
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Pilih Bulan & Tahun</label>
+                        <input type="month" id="rekapBulanInput" class="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500">
+                    </div>
+
+                    <button onclick="generateNotaRekapBulanan()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs py-2.5 px-4 rounded-lg shadow transition flex items-center justify-center gap-1.5">
+                        <i data-lucide="file-text" class="w-4 h-4"></i> Buat Struk Rekap
+                    </button>
+                </div>
+            </div>
+
+            <!-- AREA EKSPOR & ARSIP EXCEL -->
+            <div class="bg-purple-50/70 border border-purple-200 p-6 rounded-2xl shadow-sm">
+                <h2 class="text-lg font-bold text-purple-800 mb-3 flex items-center gap-2 border-b border-purple-200 pb-3">
+                    <i data-lucide="archive" class="w-5 h-5 text-purple-600"></i> Ekspor & Arsip Excel Bulanan
+                </h2>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 items-end">
+                    <div>
+                        <label class="block text-xs font-semibold uppercase text-slate-500 mb-1">Pilih Bulan & Tahun</label>
+                        <input type="month" id="pilihBulanArsip" class="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white text-sm">
+                    </div>
+                    <button onclick="unduhLaporanCSV()" class="bg-purple-600 hover:bg-purple-700 text-white font-semibold text-xs py-2.5 px-4 rounded-lg shadow transition flex items-center justify-center gap-2">
+                        <i data-lucide="download" class="w-4 h-4"></i> Unduh Excel (.CSV)
+                    </button>
+                </div>
+            </div>
+
+            <!-- TABEL TRANSAKSI -->
+            <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between border-b pb-4 mb-4 gap-3">
+                    <div>
+                        <h2 class="text-lg font-bold text-slate-700 flex items-center gap-2">
+                            <i data-lucide="list" class="w-5 h-5 text-emerald-600"></i> Daftar Riwayat Transaksi Firebase
+                        </h2>
+                    </div>
+
+                    <div>
+                        <select id="filterStatus" onchange="renderTabel()" class="text-xs px-3 py-2 border border-slate-300 rounded-lg bg-slate-50 font-medium">
+                            <option value="semua">Semua Transaksi</option>
+                            <option value="Belum Lunas">⚠️ Belum Lunas</option>
+                            <option value="Lunas">✅ Lunas</option>
+                            <option value="Selesai">📦 Sudah Diambil</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-sm text-slate-600">
+                        <thead class="bg-slate-50 text-xs uppercase font-semibold text-slate-500 border-b">
+                            <tr>
+                                <th class="py-3 px-3">Pelanggan</th>
+                                <th class="py-3 px-3">Jadwal (Masuk/Ambil)</th>
+                                <th class="py-3 px-3 text-right">Total Biaya</th>
+                                <th class="py-3 px-3 text-center">Status Bayar</th>
+                                <th class="py-3 px-3 text-center">Status Cucian</th>
+                                <th class="py-3 px-3 text-center">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tabelBody" class="divide-y divide-slate-100"></tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- MODAL EDIT TRANSAKSI -->
+    <div id="modalEditTransaksi" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div class="flex items-center justify-between border-b pb-2">
+                <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="edit" class="w-5 h-5 text-blue-600"></i> Edit Transaksi <span id="editTxIdLabel" class="text-slate-400 text-sm"></span>
+                </h3>
+                <button onclick="tutupModalEditTransaksi()" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <form id="formEditTx" onsubmit="simpanPerubahanEditTx(event)" class="space-y-3 text-xs">
+                <input type="hidden" id="editTxId">
+                <div>
+                    <label class="block font-semibold uppercase text-slate-500 mb-1">Pelanggan</label>
+                    <select id="editTxPelanggan" class="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white font-medium text-sm">
+                    </select>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block font-semibold uppercase text-slate-500 mb-1">Tgl Masuk</label>
+                        <input type="date" id="editTxTglMasuk" required class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg">
+                    </div>
+                    <div>
+                        <label class="block font-semibold uppercase text-slate-500 mb-1">Est. Ambil</label>
+                        <input type="date" id="editTxTglAmbil" required class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg">
+                    </div>
+                </div>
+
+                <div class="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="font-bold text-slate-700">Rincian Barang / Layanan:</span>
+                        <button type="button" id="btnEditTambahItemSatuan" onclick="tambahItemEditSatuan()" class="hidden text-[10px] bg-blue-600 hover:bg-blue-700 text-white font-bold px-2 py-1 rounded">
+                            + Tambah Barang
+                        </button>
+                    </div>
+
+                    <div id="areaEditKiloanContainer" class="hidden space-y-2">
+                        <input type="text" id="editTxLayananNama" placeholder="Nama Layanan Kiloan" class="w-full px-2.5 py-1 border border-slate-300 rounded font-semibold">
+                        <div class="grid grid-cols-2 gap-2">
+                            <div>
+                                <span class="text-[10px] text-slate-500">Rincian Teks</span>
+                                <input type="text" id="editTxRincianPerhitungan" placeholder="Contoh: 3 Kg x Rp 8.000" class="w-full px-2.5 py-1 border border-slate-300 rounded">
+                            </div>
+                            <div>
+                                <span class="text-[10px] text-slate-500">Hitung Otomatis Total</span>
+                                <button type="button" onclick="kalkulasiTotalEditForm()" class="w-full bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-1 rounded">Update Subtotal</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="areaEditSatuanContainer" class="hidden space-y-2">
+                        <div id="editTxListSatuanItems" class="space-y-2"></div>
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block font-semibold uppercase text-slate-500 mb-1">Total Biaya Akhir (Rp)</label>
+                    <input type="number" id="editTxTotal" min="0" step="500" required class="w-full px-3 py-2 border border-slate-300 rounded-lg font-extrabold text-emerald-700 text-base">
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <label class="block font-semibold uppercase text-slate-500 mb-1">Status Bayar</label>
+                        <select id="editTxStatus" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white font-semibold">
+                            <option value="Belum Lunas">Belum Lunas</option>
+                            <option value="Lunas">Lunas</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block font-semibold uppercase text-slate-500 mb-1">Status Cucian</label>
+                        <select id="editTxIsDiambil" class="w-full px-2.5 py-1.5 border border-slate-300 rounded-lg bg-white font-semibold">
+                            <option value="false">⏳ Diproses</option>
+                            <option value="true">📦 Sudah Diambil</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="pt-2 flex gap-2">
+                    <button type="submit" class="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-lg transition shadow">Simpan Perubahan</button>
+                    <button type="button" onclick="tutupModalEditTransaksi()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold py-2.5 px-4 rounded-lg transition">Batal</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL KELOLA JENIS LAYANAN -->
+    <div id="modalLayananKiloan" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 space-y-4">
+            <div class="flex items-center justify-between border-b pb-2">
+                <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="settings" class="w-5 h-5 text-emerald-600"></i> Kelola Jenis Layanan
+                </h3>
+                <button onclick="tutupModalLayananKiloan()" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <form id="formTambahLayananKiloan" onsubmit="tambahAtauEditLayananKiloan(event)" class="bg-emerald-50/60 p-3 rounded-xl border border-emerald-200 space-y-3 text-xs">
+                <div id="labelFormLayananHeader" class="font-bold text-emerald-900">+ Tambah Jenis Layanan Baru</div>
+                <input type="hidden" id="editLayananIndex" value="-1">
+                <div>
+                    <input type="text" id="inputNamaLayananKiloanBaru" placeholder="Nama Layanan (contoh: Cuci Lipat / Express 6 Jam)" required class="w-full px-3 py-1.5 border border-slate-300 rounded-lg">
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <span class="text-[10px] text-slate-500">Harga / Kg (Rp)</span>
+                        <input type="number" id="inputHargaKiloanBaru" min="0" step="500" value="8000" required class="w-full px-2 py-1 border border-slate-300 rounded">
+                    </div>
+                    <div>
+                        <span class="text-[10px] text-slate-500">Estimasi Selesai (Hari)</span>
+                        <input type="number" id="inputHariKiloanBaru" min="1" value="2" required class="w-full px-2 py-1 border border-slate-300 rounded">
+                    </div>
+                </div>
+                <div class="flex gap-2">
+                    <button type="submit" id="btnSimpanLayananForm" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-2 rounded-lg transition">
+                        + Simpan Layanan
+                    </button>
+                    <button type="button" id="btnBatalEditLayanan" onclick="batalEditLayananMode()" class="hidden bg-slate-200 hover:bg-slate-300 text-slate-700 font-bold px-3 py-2 rounded-lg transition">
+                        Batal
+                    </button>
+                </div>
+            </form>
+
+            <div class="font-semibold text-xs text-slate-600">Daftar Jenis Layanan Aktif:</div>
+            <div id="daftarLayananKiloanList" class="space-y-2 max-h-48 overflow-y-auto pr-1"></div>
+
+            <div class="pt-2 border-t flex gap-2">
+                <button type="button" onclick="tutupModalLayananKiloan()" class="w-full bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold py-2.5 rounded-lg transition">Selesai</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL KELOLA KATALOG BARANG SATUAN -->
+    <div id="modalKatalog" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 space-y-4">
+            <div class="flex items-center justify-between border-b pb-2">
+                <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="tag" class="w-5 h-5 text-amber-600"></i> Kelola Katalog Barang Satuan
+                </h3>
+                <button onclick="tutupModalKatalog()" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+
+            <form id="formTambahKatalog" onsubmit="tambahAtauEditKatalog(event)" class="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-3">
+                <div id="labelFormKatalogHeader" class="font-bold text-xs text-slate-700">+ Tambah Barang / Pakaian Baru</div>
+                <input type="hidden" id="editKatalogIndex" value="-1">
+                <div>
+                    <input type="text" id="inputNamaKatalogBaru" placeholder="Nama Barang (contoh: Selimut/Sepatu)" required class="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs">
+                </div>
+                <div class="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                        <span class="text-[10px] text-slate-500">Harga Cuci Komplit (Rp)</span>
+                        <input type="number" id="inputHargaKomplit" min="0" step="500" value="10000" required class="w-full px-2 py-1 border border-slate-300 rounded">
+                    </div>
+                    <div>
+                        <span class="text-[10px] text-slate-500">Harga Cuci Kering (Rp)</span>
+                        <input type="number" id="inputHargaKering" min="0" step="500" value="8000" required class="w-full px-2 py-1 border border-slate-300 rounded">
+                    </div>
+                </div>
+                <div class="flex gap-2">
+                    <button type="submit" id="btnSimpanKatalogForm" class="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs py-2 rounded-lg transition">
+                        + Simpan Ke Katalog
+                    </button>
+                    <button type="button" id="btnBatalEditKatalog" onclick="batalEditKatalogMode()" class="hidden bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold px-3 py-2 rounded-lg transition">
+                        Batal
+                    </button>
+                </div>
+            </form>
+
+            <div class="font-semibold text-xs text-slate-600">Daftar Katalog Tersimpan:</div>
+            <div id="daftarKatalogList" class="space-y-2 max-h-48 overflow-y-auto pr-1"></div>
+
+            <div class="pt-2 border-t flex gap-2">
+                <button type="button" onclick="tutupModalKatalog()" class="w-full bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold py-2.5 rounded-lg transition">Selesai</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL TAMBAH PELANGGAN BARU -->
+    <div id="modalPelanggan" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4">
+            <h3 class="text-lg font-bold text-slate-800 border-b pb-2 flex items-center gap-2">
+                <i data-lucide="user-plus" class="w-5 h-5 text-emerald-600"></i> Tambah Pelanggan Baru
+            </h3>
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="block font-semibold uppercase text-slate-500 mb-1">Nama Lengkap *</label>
+                    <input type="text" id="inputNamaPelangganBaru" placeholder="Contoh: Ibu Ani" class="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm">
+                </div>
+            </div>
+            <div class="flex gap-2 pt-2">
+                <button type="button" onclick="simpanPelangganBaru()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2.5 rounded-lg transition">Simpan Pelanggan</button>
+                <button type="button" onclick="tutupModalPelanggan()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold py-2.5 px-4 rounded-lg transition">Batal</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL KELOLA & HAPUS PELANGGAN -->
+    <div id="modalKelolaPelanggan" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50">
+        <div class="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4">
+            <div class="flex items-center justify-between border-b pb-2">
+                <h3 class="text-lg font-bold text-slate-800 flex items-center gap-2">
+                    <i data-lucide="users" class="w-5 h-5 text-rose-600"></i> Kelola & Hapus Pelanggan
+                </h3>
+                <button onclick="tutupModalKelolaPelanggan()" class="text-slate-400 hover:text-slate-600">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            
+            <p class="text-xs text-slate-500">Daftar semua nama pelanggan yang tersimpan. Klik ikon tong sampah untuk menghapus pelanggan.</p>
+
+            <div id="daftarPelangganKelolaList" class="space-y-2 max-h-60 overflow-y-auto pr-1"></div>
+
+            <div class="pt-2 border-t">
+                <button type="button" onclick="tutupModalKelolaPelanggan()" class="w-full bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold py-2.5 rounded-lg transition">Selesai</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL NOTA STRUK INDIVIDUAL -->
+    <div id="modalNota" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50 print:p-0">
+        <div class="bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 text-slate-800 space-y-4 print:shadow-none print:w-full" id="areaNotaPrint">
+            <div class="text-center border-b pb-3 border-dashed border-slate-300">
+                <h3 class="text-lg font-bold tracking-wide uppercase">BERKAH LAUNDRY</h3>
+                <p class="text-xs text-slate-500">PPMH</p>
+            </div>
+
+            <div class="text-xs space-y-1">
+                <div class="flex justify-between"><span class="text-slate-500">No. Nota:</span> <span id="notaId" class="font-bold">#0000</span></div>
+                <div class="flex justify-between"><span class="text-slate-500">Tanggal Masuk:</span> <span id="notaTglMasuk">-</span></div>
+                <div class="flex justify-between"><span class="text-slate-500">Est. Selesai:</span> <span id="notaTglAmbil" class="font-medium">-</span></div>
+                <div class="flex justify-between"><span class="text-slate-500">Pelanggan:</span> <span id="notaNama" class="font-bold">-</span></div>
+            </div>
+
+            <div class="border-t border-b py-2 border-dashed border-slate-300 text-xs">
+                <div class="font-bold text-slate-700 mb-1 flex justify-between">
+                    <span id="notaLayanan">Layanan</span>
+                    <span id="notaTotalItem">Rp 0</span>
+                </div>
+                <div id="notaRincianHitung" class="text-slate-600 space-y-1 text-[11px] font-medium">-</div>
+            </div>
+
+            <div class="text-xs space-y-1">
+                <div class="flex justify-between text-sm font-bold">
+                    <span>TOTAL BIAYA:</span>
+                    <span id="notaTotalBayar" class="text-emerald-700">Rp 0</span>
+                </div>
+                <div class="flex justify-between">
+                    <span class="text-slate-500">Status Pembayaran:</span>
+                    <span id="notaStatusBayar" class="font-bold">Belum Lunas</span>
+                </div>
+            </div>
+
+            <div class="text-center pt-2 border-t border-dashed border-slate-300 text-[10px] text-slate-400 space-y-1">
+                <p>Syarat & Ketentuan:</p>
+                <p>1. Pengambilan wajib membawa nota ini.</p>
+                <p>2. Barang yang tidak diambil > 7 hari di luar tanggung jawab kami.</p>
+                <p class="font-semibold text-slate-600 pt-1">*** Terima Kasih ***</p>
+            </div>
+
+            <div id="areaTombolNota" class="flex flex-col sm:flex-row gap-2 pt-2 print:hidden">
+                <button type="button" onclick="unduhNotaGambar()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 px-3 rounded-lg transition flex items-center justify-center gap-1 shadow">
+                    <i data-lucide="image" class="w-4 h-4"></i> Simpan Gambar
+                </button>
+                <button type="button" onclick="eksekusiCetak()" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2 px-3 rounded-lg transition flex items-center justify-center gap-1 shadow">
+                    <i data-lucide="printer" class="w-4 h-4"></i> Cetak
+                </button>
+                <button type="button" onclick="tutupModalNota()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold py-2 px-3 rounded-lg transition">
+                    Tutup
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL NOTA REKAP BULANAN -->
+    <div id="modalNotaRekap" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm hidden flex items-center justify-center p-4 z-50 print:p-0">
+        <div class="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 text-slate-800 space-y-4 print:shadow-none print:w-full" id="areaNotaRekapPrint">
+            <div class="text-center border-b pb-3 border-dashed border-slate-300">
+                <h3 class="text-lg font-bold tracking-wide uppercase">BERKAH LAUNDRY</h3>
+                <p class="text-xs text-slate-500">PPMH - STRUK REKAPITULASI BULANAN</p>
+            </div>
+
+            <div class="text-xs space-y-1">
+                <div class="flex justify-between"><span class="text-slate-500">Filter/Pelanggan:</span> <span id="rekapNotaNama" class="font-bold text-slate-800">-</span></div>
+                <div class="flex justify-between"><span class="text-slate-500">Periode Bulan:</span> <span id="rekapNotaBulan" class="font-bold text-emerald-700">-</span></div>
+                <div class="flex justify-between"><span class="text-slate-500">Total Transaksi:</span> <span id="rekapNotaJumlahTx" class="font-semibold">-</span></div>
+            </div>
+
+            <div class="border-t border-b py-2 border-dashed border-slate-300 text-xs space-y-2">
+                <div class="font-bold text-slate-700 mb-1">Rincian Transaksi:</div>
+                <div id="rekapNotaRincianList" class="space-y-1.5 max-h-48 overflow-y-auto text-[11px] font-medium pr-1"></div>
+            </div>
+
+            <div class="text-xs space-y-1.5 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                <div class="flex justify-between text-emerald-700 font-semibold">
+                    <span>✅ Total Sudah Lunas:</span>
+                    <span id="rekapNotaTotalLunas">Rp 0</span>
+                </div>
+                <div class="flex justify-between text-amber-700 font-semibold">
+                    <span>⚠️ Total Belum Lunas (Piutang):</span>
+                    <span id="rekapNotaTotalBelumLunas">Rp 0</span>
+                </div>
+                <div class="flex justify-between text-sm font-extrabold border-t border-slate-300 pt-1 text-slate-800">
+                    <span>GRAND TOTAL BIAYA:</span>
+                    <span id="rekapNotaGrandTotal" class="text-blue-700">Rp 0</span>
+                </div>
+            </div>
+
+            <div class="text-center pt-2 border-t border-dashed border-slate-300 text-[10px] text-slate-400 space-y-1">
+                <p class="font-semibold text-slate-600">*** Dokumen Rekapitulasi Resmi ***</p>
+            </div>
+
+            <div id="areaTombolNotaRekap" class="flex flex-col sm:flex-row gap-2 pt-2 print:hidden">
+                <button type="button" onclick="unduhNotaRekapGambar()" class="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2 px-3 rounded-lg transition flex items-center justify-center gap-1 shadow">
+                    <i data-lucide="image" class="w-4 h-4"></i> Simpan Gambar
+                </button>
+                <button type="button" onclick="eksekusiCetak()" class="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2 px-3 rounded-lg transition flex items-center justify-center gap-1 shadow">
+                    <i data-lucide="printer" class="w-4 h-4"></i> Cetak
+                </button>
+                <button type="button" onclick="tutupModalNotaRekap()" class="bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold py-2 px-3 rounded-lg transition">
+                    Tutup
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- LOGIKA SCRIPT UTAMA FIREBASE INTEGRATION -->
+    <script>
+        if (window.lucide) lucide.createIcons();
+
+        // ⚠️ KONFIGURASI FIREBASE ANDA
+        const firebaseConfig = {
+            apiKey: "AIzaSyDpl5sZqHsTk52KwqyJjeRCFw9BZ5AORDg",
+            authDomain: "berkah-laundry-kasir.firebaseapp.com",
+            projectId: "berkah-laundry-kasir",
+            storageBucket: "berkah-laundry-kasir.firebasestorage.app",
+            messagingSenderId: "568235200768",
+            appId: "1:568235200768:web:3a57506e2efe91391323e5"
+        };
+
+        // INISIALISASI FIREBASE & FIRESTORE
+        let db = null;
+        let dbTransaksiRef = null;
+        let dbPelangganRef = null;
+
+        try {
+            firebase.initializeApp(firebaseConfig);
+            db = firebase.firestore();
+            
+            // Aktifkan Offline Persistence
+            db.enablePersistence({ synchronizeTabs: true }).catch(() => {});
+
+            dbTransaksiRef = db.collection("transaksi");
+            dbPelangganRef = db.collection("pelanggan");
+        } catch(err) {
+            console.warn("Firebase Config belum diisi.");
+        }
+
+        // STORAGE LOKAL FALLBACK
+        let dataTransaksi = JSON.parse(localStorage.getItem('laundry_data_local')) || [];
+        let dataPelanggan = JSON.parse(localStorage.getItem('laundry_pelanggan_local')) || ["Budi Santoso", "Ibu Ani", "Pak Ahmad", "Pelanggan Umum"];
+
+        const DEFAULT_KATALOG = [
+            { nama: 'Kemeja / Kaos', harga: { 'Cuci Komplit': 8000, 'Cuci Kering': 6000, 'Setrika Saja': 5000, 'Express 1 Hari': 12000 } },
+            { nama: 'Celana Panjang / Jeans', harga: { 'Cuci Komplit': 10000, 'Cuci Kering': 8000, 'Setrika Saja': 6000, 'Express 1 Hari': 15000 } },
+            { nama: 'Jas Formal / Blazer', harga: { 'Cuci Komplit': 25000, 'Cuci Kering': 20000, 'Setrika Saja': 15000, 'Express 1 Hari': 35000 } },
+            { nama: 'Gaun / Gaun Pesta', harga: { 'Cuci Komplit': 30000, 'Cuci Kering': 25000, 'Setrika Saja': 20000, 'Express 1 Hari': 45000 } },
+            { nama: 'Jaket Tebal / Coat', harga: { 'Cuci Komplit': 20000, 'Cuci Kering': 15000, 'Setrika Saja': 12000, 'Express 1 Hari': 30000 } },
+            { nama: 'Bedcover Kecil (Single)', harga: { 'Cuci Komplit': 25000, 'Cuci Kering': 20000, 'Setrika Saja': 15000, 'Express 1 Hari': 35000 } },
+            { nama: 'Bedcover Besar (King)', harga: { 'Cuci Komplit': 35000, 'Cuci Kering': 30000, 'Setrika Saja': 20000, 'Express 1 Hari': 50000 } },
+            { nama: 'Gorden / Karpet (Pcs)', harga: { 'Cuci Komplit': 30000, 'Cuci Kering': 25000, 'Setrika Saja': 20000, 'Express 1 Hari': 45000 } },
+            { nama: 'Lainnya (Custom)', harga: { 'Cuci Komplit': 15000, 'Cuci Kering': 12000, 'Setrika Saja': 10000, 'Express 1 Hari': 20000 } }
+        ];
+
+        const DEFAULT_LAYANAN_KILOAN = [
+            { nama: 'Cuci Komplit', harga: 10000, hari: 3 },
+            { nama: 'Cuci Kering', harga: 7000, hari: 3 },
+            { nama: 'Setrika Saja', harga: 4000, hari: 1 },
+            { nama: 'Express 1 Hari', harga: 15000, hari: 1 }
+        ];
+
+        let KATALOG_BARANG = JSON.parse(localStorage.getItem('laundry_katalog_local')) || DEFAULT_KATALOG;
+        let LAYANAN_KILOAN = JSON.parse(localStorage.getItem('laundry_kiloan_local')) || DEFAULT_LAYANAN_KILOAN;
+
+        let currentFilterAmbil = 'semua';
+        let myChartInstance = null;
+
+        function simpanKeLokal() {
+            localStorage.setItem('laundry_data_local', JSON.stringify(dataTransaksi));
+            localStorage.setItem('laundry_pelanggan_local', JSON.stringify(dataPelanggan));
+            localStorage.setItem('laundry_katalog_local', JSON.stringify(KATALOG_BARANG));
+            localStorage.setItem('laundry_kiloan_local', JSON.stringify(LAYANAN_KILOAN));
+        }
+
+        function tampilkanStatusSync(pesan, tipe = "info") {
+            const bar = document.getElementById('statusBarSync');
+            if (!bar) return;
+            bar.innerText = pesan;
+            bar.classList.remove('hidden', 'bg-blue-100', 'text-blue-800', 'bg-emerald-100', 'text-emerald-800', 'bg-rose-100', 'text-rose-800', 'bg-amber-100', 'text-amber-800');
+            
+            if (tipe === "info") bar.classList.add('bg-blue-100', 'text-blue-800');
+            else if (tipe === "success") bar.classList.add('bg-emerald-100', 'text-emerald-800');
+            else if (tipe === "warning") bar.classList.add('bg-amber-100', 'text-amber-800');
+            else if (tipe === "error") bar.classList.add('bg-rose-100', 'text-rose-800');
+        }
+
+        function perbaruiIndikatorStatus() {
+            const ind = document.getElementById('indikatorSync');
+            if (!ind) return;
+            if (navigator.onLine) {
+                ind.className = "text-xs bg-emerald-800 text-emerald-100 px-3 py-1 rounded-full font-semibold flex items-center gap-1";
+                ind.innerHTML = `<i data-lucide="wifi" class="w-4 h-4"></i> Online (Firebase Firestore)`;
+            } else {
+                ind.className = "text-xs bg-amber-600 text-white px-3 py-1 rounded-full font-semibold flex items-center gap-1";
+                ind.innerHTML = `<i data-lucide="wifi-off" class="w-4 h-4"></i> Offline Mode (Local Cache)`;
+            }
+            if (window.lucide) lucide.createIcons();
+        }
+
+        // LISTEN REALTIME DATA DARI FIREBASE
+        function muatDataFirebase() {
+            renderSelectLayananKiloan();
+            
+            if (!db) {
+                tampilkanStatusSync("⚠️ Firebase Config belum diisi. Menggunakan penyimpanan lokal.", "warning");
+                renderTabel();
+                renderSelectPelanggan();
+                renderDropdownPengambilan();
+                updateChartPelanggan();
+                return;
+            }
+
+            tampilkanStatusSync("⏳ Terhubung ke Firebase Firestore Realtime...", "info");
+
+            // Realtime Listener Transaksi
+            dbTransaksiRef.orderBy("id", "desc").onSnapshot(snapshot => {
+                dataTransaksi = [];
+                snapshot.forEach(doc => {
+                    dataTransaksi.push(doc.data());
+                });
+                simpanKeLokal();
+                renderTabel();
+                renderDropdownPengambilan();
+                updateChartPelanggan();
+                tampilkanStatusSync("✅ Data Berhasil Disinkronkan dengan Firebase!", "success");
+                setTimeout(() => document.getElementById('statusBarSync').classList.add('hidden'), 3000);
+            }, err => {
+                tampilkanStatusSync("📡 Memakai Data Lokal (Koneksi Firebase terputus).", "warning");
+            });
+
+            // Realtime Listener Pelanggan
+            dbPelangganRef.onSnapshot(snapshot => {
+                if (!snapshot.empty) {
+                    let listPl = [];
+                    snapshot.forEach(doc => listPl.push(doc.data().nama));
+                    if (listPl.length > 0) dataPelanggan = listPl;
+                    simpanKeLokal();
+                    renderSelectPelanggan();
+                }
+            });
+
+            perbaruiIndikatorStatus();
+        }
+
+        function simpanTransaksiCloud(tx) {
+            simpanKeLokal();
+            if (dbTransaksiRef) {
+                dbTransaksiRef.doc(tx.id.toString()).set(tx).catch(() => {});
+            }
+        }
+
+        function updateTransaksiCloud(tx) {
+            simpanKeLokal();
+            if (dbTransaksiRef) {
+                dbTransaksiRef.doc(tx.id.toString()).set(tx, { merge: true }).catch(() => {});
+            }
+        }
+
+        function hapusTransaksiCloud(id) {
+            simpanKeLokal();
+            if (dbTransaksiRef) {
+                dbTransaksiRef.doc(id.toString()).delete().catch(() => {});
+            }
+        }
+
+        function simpanPelangganCloud(nama) {
+            simpanKeLokal();
+            if (dbPelangganRef) {
+                dbPelangganRef.doc(nama).set({ nama: nama }).catch(() => {});
+            }
+        }
+
+        function renderSelectLayananKiloan() {
+            const select = document.getElementById('layananKiloan');
+            if (!select) return;
+
+            select.innerHTML = LAYANAN_KILOAN.map(item => 
+                `<option value="${item.harga}" data-hari="${item.hari}">${item.nama} (Rp ${item.harga.toLocaleString('id-ID')}/kg - ${item.hari} Hari)</option>`
+            ).join('');
+
+            updateEstimasiDanTotal();
+        }
+
+        function updateChartPelanggan() {
+            const ctx = document.getElementById('chartPelangganTerbanyak');
+            if (!ctx || !window.Chart) return;
+
+            const totalPembayaranPerPelanggan = {};
+            dataTransaksi.forEach(t => {
+                if (t.nama) {
+                    totalPembayaranPerPelanggan[t.nama] = (totalPembayaranPerPelanggan[t.nama] || 0) + (t.total || 0);
+                }
+            });
+
+            const sortedPelanggan = Object.keys(totalPembayaranPerPelanggan)
+                .map(nama => ({ nama: nama, totalRp: totalPembayaranPerPelanggan[nama] }))
+                .sort((a, b) => b.totalRp - a.totalRp)
+                .slice(0, 7);
+
+            const labels = sortedPelanggan.map(item => item.nama);
+            const dataTotals = sortedPelanggan.map(item => item.totalRp);
+
+            if (myChartInstance) {
+                myChartInstance.destroy();
+            }
+
+            myChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels.length > 0 ? labels : ['Belum Ada Data'],
+                    datasets: [{
+                        label: 'Total Nominal Pembayaran (Rp)',
+                        data: dataTotals.length > 0 ? dataTotals : [0],
+                        backgroundColor: 'rgba(5, 150, 105, 0.85)',
+                        borderColor: 'rgb(4, 120, 87)',
+                        borderWidth: 1.5,
+                        borderRadius: 8
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return ' Total: Rp ' + context.parsed.y.toLocaleString('id-ID');
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                callback: function(value) {
+                                    return 'Rp ' + (value/1000).toLocaleString('id-ID') + 'k';
+                                },
+                                font: { size: 10 }
+                            }
+                        },
+                        x: {
+                            ticks: { font: { size: 11, weight: 'bold' } }
+                        }
+                    }
+                }
+            });
+        }
+
+        function gantiTab(targetTab) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.remove('bg-emerald-600', 'text-white', 'shadow-md');
+                btn.classList.add('text-slate-600', 'hover:bg-slate-100');
+            });
+
+            document.getElementById(`tab-${targetTab}`).classList.remove('hidden');
+            const activeBtn = document.getElementById(`btnTab-${targetTab}`);
+            activeBtn.classList.remove('text-slate-600', 'hover:bg-slate-100');
+            activeBtn.classList.add('bg-emerald-600', 'text-white', 'shadow-md');
+
+            if (targetTab === 'pengambilan') {
+                renderDropdownPengambilan();
+            } else if (targetTab === 'dashboard') {
+                updateChartPelanggan();
+            }
+        }
+
+        function setFilterPengambilan(status) {
+            currentFilterAmbil = status;
+            ['semua', 'Lunas', 'Belum Lunas'].forEach(s => {
+                const btn = document.getElementById(`btnFilterAmbil-${s}`);
+                if (s === status) {
+                    btn.className = "flex-1 py-1.5 px-3 rounded-lg text-xs font-bold bg-emerald-600 text-white shadow-sm";
+                } else {
+                    btn.className = "flex-1 py-1.5 px-3 rounded-lg text-xs font-bold bg-white text-slate-600 border border-slate-200 hover:bg-slate-50";
+                }
+            });
+            renderDropdownPengambilan();
+        }
+
+        function renderSelectPelanggan() {
+            const select = document.getElementById('selectPelanggan');
+            const rekapSelect = document.getElementById('rekapPelangganSelect');
+            const editPelangganSelect = document.getElementById('editTxPelanggan');
+            
+            const optionsHtml = `<option value="SEMUA_PELANGGAN">-- TOTAL (SEMUA PELANGGAN) --</option>` + dataPelanggan.map(p => `<option value="${p}">${p}</option>`).join('');
+            const simpleOptionsHtml = dataPelanggan.map(p => `<option value="${p}">${p}</option>`).join('');
+
+            if (select) select.innerHTML = simpleOptionsHtml;
+            if (rekapSelect) rekapSelect.innerHTML = optionsHtml;
+            if (editPelangganSelect) editPelangganSelect.innerHTML = simpleOptionsHtml;
+        }
+
+        function bukaModalPelangganBaru() {
+            document.getElementById('inputNamaPelangganBaru').value = '';
+            document.getElementById('modalPelanggan').classList.remove('hidden');
+        }
+
+        function tutupModalPelanggan() {
+            document.getElementById('modalPelanggan').classList.add('hidden');
+        }
+
+        function simpanPelangganBaru() {
+            const namaBaru = document.getElementById('inputNamaPelangganBaru').value.trim();
+            if (!namaBaru) {
+                alert('Nama pelanggan wajib diisi!');
+                return;
+            }
+
+            if (!dataPelanggan.includes(namaBaru)) {
+                dataPelanggan.unshift(namaBaru);
+                simpanKeLokal();
+                simpanPelangganCloud(namaBaru);
+            }
+
+            renderSelectPelanggan();
+            document.getElementById('selectPelanggan').value = namaBaru;
+            tutupModalPelanggan();
+        }
+
+        function bukaModalKelolaPelanggan() {
+            const listContainer = document.getElementById('daftarPelangganKelolaList');
+            if (dataPelanggan.length === 0) {
+                listContainer.innerHTML = `<p class="text-xs text-slate-400 text-center py-4">Belum ada pelanggan tersimpan.</p>`;
+            } else {
+                listContainer.innerHTML = dataPelanggan.map((p, idx) => `
+                    <div class="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-200">
+                        <span class="text-xs font-semibold text-slate-700">${idx + 1}. ${p}</span>
+                        <button onclick="hapusPelanggan('${p}')" class="text-rose-500 hover:text-rose-700 p-1 transition" title="Hapus Pelanggan">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                `).join('');
+            }
+
+            document.getElementById('modalKelolaPelanggan').classList.remove('hidden');
+            if (window.lucide) lucide.createIcons();
+        }
+
+        function tutupModalKelolaPelanggan() {
+            document.getElementById('modalKelolaPelanggan').classList.add('hidden');
+        }
+
+        function hapusPelanggan(nama) {
+            if (confirm(`Apakah Anda YAKIN ingin menghapus "${nama}" dari daftar pelanggan?`)) {
+                dataPelanggan = dataPelanggan.filter(p => p !== nama);
+                simpanKeLokal();
+                if (dbPelangganRef) dbPelangganRef.doc(nama).delete().catch(() => {});
+                renderSelectPelanggan();
+                bukaModalKelolaPelanggan();
+            }
+        }
+
+        function bukaModalLayananKiloan() {
+            batalEditLayananMode();
+            renderDaftarLayananKiloanModal();
+            document.getElementById('modalLayananKiloan').classList.remove('hidden');
+        }
+
+        function tutupModalLayananKiloan() {
+            document.getElementById('modalLayananKiloan').classList.add('hidden');
+        }
+
+        function renderDaftarLayananKiloanModal() {
+            const container = document.getElementById('daftarLayananKiloanList');
+            if (!container) return;
+
+            container.innerHTML = LAYANAN_KILOAN.map((item, idx) => `
+                <div class="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+                    <div>
+                        <div class="font-bold text-slate-800">${item.nama}</div>
+                        <div class="text-[10px] text-slate-500">Rp ${item.harga.toLocaleString('id-ID')} / kg • Estimasi ${item.hari} Hari</div>
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <button onclick="editLayananKiloanItem(${idx})" class="text-blue-600 hover:text-blue-800 p-1 transition" title="Edit Layanan">
+                            <i data-lucide="edit-3" class="w-4 h-4"></i>
+                        </button>
+                        <button onclick="hapusLayananKiloanItem(${idx})" class="text-rose-500 hover:text-rose-700 p-1 transition" title="Hapus Layanan">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+
+            if (window.lucide) lucide.createIcons();
+        }
+
+        function editLayananKiloanItem(index) {
+            const item = LAYANAN_KILOAN[index];
+            if (!item) return;
+
+            document.getElementById('editLayananIndex').value = index;
+            document.getElementById('inputNamaLayananKiloanBaru').value = item.nama;
+            document.getElementById('inputHargaKiloanBaru').value = item.harga;
+            document.getElementById('inputHariKiloanBaru').value = item.hari;
+
+            document.getElementById('labelFormLayananHeader').innerText = `✏️ Edit Jenis Layanan: ${item.nama}`;
+            document.getElementById('btnSimpanLayananForm').innerText = "Simpan Perubahan";
+            document.getElementById('btnBatalEditLayanan').classList.remove('hidden');
+        }
+
+        function batalEditLayananMode() {
+            document.getElementById('editLayananIndex').value = "-1";
+            document.getElementById('formTambahLayananKiloan').reset();
+            document.getElementById('labelFormLayananHeader').innerText = "+ Tambah Jenis Layanan Baru";
+            document.getElementById('btnSimpanLayananForm').innerText = "+ Tambahkan Jenis Layanan";
+            document.getElementById('btnBatalEditLayanan').classList.add('hidden');
+        }
+
+        function tambahAtauEditLayananKiloan(e) {
+            e.preventDefault();
+            const editIdx = parseInt(document.getElementById('editLayananIndex').value);
+            const nama = document.getElementById('inputNamaLayananKiloanBaru').value.trim();
+            const harga = parseFloat(document.getElementById('inputHargaKiloanBaru').value) || 0;
+            const hari = parseInt(document.getElementById('inputHariKiloanBaru').value) || 1;
+
+            if (!nama) return;
+
+            if (editIdx >= 0 && editIdx < LAYANAN_KILOAN.length) {
+                LAYANAN_KILOAN[editIdx] = { nama, harga, hari };
+            } else {
+                LAYANAN_KILOAN.unshift({ nama, harga, hari });
+            }
+
+            simpanKeLokal();
+            batalEditLayananMode();
+            renderDaftarLayananKiloanModal();
+            renderSelectLayananKiloan();
+
+            const listSatuan = document.getElementById('listBarangSatuan');
+            if (listSatuan) listSatuan.innerHTML = '';
+            tambahBarangSatuan();
+        }
+
+        function hapusLayananKiloanItem(index) {
+            if (LAYANAN_KILOAN.length <= 1) {
+                alert("Minimal harus ada 1 jenis layanan!");
+                return;
+            }
+            if (confirm(`Hapus "${LAYANAN_KILOAN[index].nama}" dari daftar jenis layanan?`)) {
+                LAYANAN_KILOAN.splice(index, 1);
+                simpanKeLokal();
+                batalEditLayananMode();
+                renderDaftarLayananKiloanModal();
+                renderSelectLayananKiloan();
+
+                const listSatuan = document.getElementById('listBarangSatuan');
+                if (listSatuan) listSatuan.innerHTML = '';
+                tambahBarangSatuan();
+            }
+        }
+
+        function bukaModalKatalog() {
+            batalEditKatalogMode();
+            renderDaftarKatalogModal();
+            document.getElementById('modalKatalog').classList.remove('hidden');
+        }
+
+        function tutupModalKatalog() {
+            document.getElementById('modalKatalog').classList.add('hidden');
+        }
+
+        function renderDaftarKatalogModal() {
+            const container = document.getElementById('daftarKatalogList');
+            if (!container) return;
+
+            container.innerHTML = KATALOG_BARANG.map((item, idx) => `
+                <div class="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+                    <div>
+                        <div class="font-bold text-slate-800">${item.nama}</div>
+                        <div class="text-[10px] text-slate-500">Komplit: Rp ${(item.harga['Cuci Komplit'] || 10000).toLocaleString('id-ID')} | Kering: Rp ${(item.harga['Cuci Kering'] || 8000).toLocaleString('id-ID')}</div>
+                    </div>
+                    <div class="flex items-center gap-1">
+                        <button onclick="editKatalogItem(${idx})" class="text-blue-600 hover:text-blue-800 p-1 transition" title="Edit Katalog">
+                            <i data-lucide="edit-3" class="w-4 h-4"></i>
+                        </button>
+                        <button onclick="hapusKatalogItem(${idx})" class="text-rose-500 hover:text-rose-700 p-1 transition" title="Hapus Barang">
+                            <i data-lucide="trash-2" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+            `).join('');
+
+            if (window.lucide) lucide.createIcons();
+        }
+
+        function editKatalogItem(index) {
+            const item = KATALOG_BARANG[index];
+            if (!item) return;
+
+            document.getElementById('editKatalogIndex').value = index;
+            document.getElementById('inputNamaKatalogBaru').value = item.nama;
+            document.getElementById('inputHargaKomplit').value = item.harga['Cuci Komplit'] || 10000;
+            document.getElementById('inputHargaKering').value = item.harga['Cuci Kering'] || 8000;
+
+            document.getElementById('labelFormKatalogHeader').innerText = `✏️ Edit Barang Katalog: ${item.nama}`;
+            document.getElementById('btnSimpanKatalogForm').innerText = "Simpan Perubahan";
+            document.getElementById('btnBatalEditKatalog').classList.remove('hidden');
+        }
+
+        function batalEditKatalogMode() {
+            document.getElementById('editKatalogIndex').value = "-1";
+            document.getElementById('formTambahKatalog').reset();
+            document.getElementById('labelFormKatalogHeader').innerText = "+ Tambah Barang / Pakaian Baru";
+            document.getElementById('btnSimpanKatalogForm').innerText = "+ Tambahkan Ke Katalog";
+            document.getElementById('btnBatalEditKatalog').classList.add('hidden');
+        }
+
+        function tambahAtauEditKatalog(e) {
+            e.preventDefault();
+            const editIdx = parseInt(document.getElementById('editKatalogIndex').value);
+            const nama = document.getElementById('inputNamaKatalogBaru').value.trim();
+            const komplit = parseFloat(document.getElementById('inputHargaKomplit').value) || 0;
+            const kering = parseFloat(document.getElementById('inputHargaKering').value) || 0;
+
+            if (!nama) return;
+
+            const hargaMap = {
+                'Cuci Komplit': komplit,
+                'Cuci Kering': kering,
+                'Setrika Saja': Math.round(komplit * 0.6),
+                'Express 1 Hari': Math.round(komplit * 1.5)
+            };
+
+            LAYANAN_KILOAN.forEach(l => {
+                if (!hargaMap[l.nama]) {
+                    hargaMap[l.nama] = komplit;
+                }
+            });
+
+            if (editIdx >= 0 && editIdx < KATALOG_BARANG.length) {
+                KATALOG_BARANG[editIdx] = { nama: nama, harga: hargaMap };
+            } else {
+                KATALOG_BARANG.unshift({ nama: nama, harga: hargaMap });
+            }
+
+            simpanKeLokal();
+            batalEditKatalogMode();
+            renderDaftarKatalogModal();
+
+            const listSatuan = document.getElementById('listBarangSatuan');
+            if (listSatuan) listSatuan.innerHTML = '';
+            tambahBarangSatuan();
+        }
+
+        function hapusKatalogItem(index) {
+            if (confirm(`Hapus "${KATALOG_BARANG[index].nama}" dari katalog?`)) {
+                KATALOG_BARANG.splice(index, 1);
+                simpanKeLokal();
+                batalEditKatalogMode();
+                renderDaftarKatalogModal();
+
+                const listSatuan = document.getElementById('listBarangSatuan');
+                if (listSatuan) listSatuan.innerHTML = '';
+                tambahBarangSatuan();
+            }
+        }
+
+        function bukaModalEditTransaksi(id) {
+            const item = dataTransaksi.find(t => t.id === id);
+            if (!item) return;
+
+            document.getElementById('editTxId').value = item.id;
+            document.getElementById('editTxIdLabel').innerText = `#${item.id}`;
+            document.getElementById('editTxPelanggan').value = item.nama;
+            document.getElementById('editTxTglMasuk').value = item.tglMasuk;
+            document.getElementById('editTxTglAmbil').value = item.tglAmbil;
+            document.getElementById('editTxTotal').value = item.total;
+            document.getElementById('editTxStatus').value = item.status;
+            document.getElementById('editTxIsDiambil').value = item.isDiambil ? "true" : "false";
+
+            const areaKiloan = document.getElementById('areaEditKiloanContainer');
+            const areaSatuan = document.getElementById('areaEditSatuanContainer');
+            const btnTambahSatuan = document.getElementById('btnEditTambahItemSatuan');
+
+            if (Array.isArray(item.itemsSatuan) && item.itemsSatuan.length > 0) {
+                areaKiloan.classList.add('hidden');
+                areaSatuan.classList.remove('hidden');
+                btnTambahSatuan.classList.remove('hidden');
+
+                renderEditSatuanItems(item.itemsSatuan);
+            } else {
+                areaSatuan.classList.add('hidden');
+                areaKiloan.classList.remove('hidden');
+                btnTambahSatuan.classList.add('hidden');
+
+                document.getElementById('editTxLayananNama').value = item.layananNama || 'Cuci Kiloan';
+                document.getElementById('editTxRincianPerhitungan').value = item.rincianPerhitungan || '';
+            }
+
+            document.getElementById('modalEditTransaksi').classList.remove('hidden');
+            if (window.lucide) lucide.createIcons();
+        }
+
+        function renderEditSatuanItems(itemsSatuan) {
+            const container = document.getElementById('editTxListSatuanItems');
+            if (!container) return;
+
+            container.innerHTML = itemsSatuan.map((it, idx) => `
+                <div class="p-2 bg-white rounded-lg border border-slate-200 text-xs space-y-1.5 edit-satuan-item-row">
+                    <div class="flex items-center gap-1.5">
+                        <input type="text" value="${it.nama}" placeholder="Nama Barang" class="edit-item-nama flex-1 px-2 py-1 border border-slate-300 rounded font-semibold">
+                        <button type="button" onclick="hapusRowEditSatuan(this)" class="text-rose-500 hover:text-rose-700 p-1">
+                            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                        </button>
+                    </div>
+                    <div class="grid grid-cols-3 gap-1.5">
+                        <div>
+                            <span class="text-[9px] text-slate-400 block">Layanan</span>
+                            <input type="text" value="${it.layanan}" class="edit-item-layanan w-full px-1.5 py-0.5 border border-slate-300 rounded">
+                        </div>
+                        <div>
+                            <span class="text-[9px] text-slate-400 block">Qty (Pcs)</span>
+                            <input type="number" value="${it.pcs}" min="1" oninput="kalkulasiTotalEditForm()" class="edit-item-pcs w-full px-1.5 py-0.5 border border-slate-300 rounded">
+                        </div>
+                        <div>
+                            <span class="text-[9px] text-slate-400 block">Harga/Pcs</span>
+                            <input type="number" value="${it.harga}" min="0" step="500" oninput="kalkulasiTotalEditForm()" class="edit-item-harga w-full px-1.5 py-0.5 border border-slate-300 rounded font-semibold text-emerald-700">
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            if (window.lucide) lucide.createIcons();
+        }
+
+        function tambahItemEditSatuan() {
+            const container = document.getElementById('editTxListSatuanItems');
+            const rowDiv = document.createElement('div');
+            rowDiv.className = "p-2 bg-white rounded-lg border border-slate-200 text-xs space-y-1.5 edit-satuan-item-row";
+            rowDiv.innerHTML = `
+                <div class="flex items-center gap-1.5">
+                    <input type="text" value="Baju Baru" placeholder="Nama Barang" class="edit-item-nama flex-1 px-2 py-1 border border-slate-300 rounded font-semibold">
+                    <button type="button" onclick="hapusRowEditSatuan(this)" class="text-rose-500 hover:text-rose-700 p-1">
+                        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                    </button>
+                </div>
+                <div class="grid grid-cols-3 gap-1.5">
+                    <div>
+                        <span class="text-[9px] text-slate-400 block">Layanan</span>
+                        <input type="text" value="Cuci Komplit" class="edit-item-layanan w-full px-1.5 py-0.5 border border-slate-300 rounded">
+                    </div>
+                    <div>
+                        <span class="text-[9px] text-slate-400 block">Qty (Pcs)</span>
+                        <input type="number" value="1" min="1" oninput="kalkulasiTotalEditForm()" class="edit-item-pcs w-full px-1.5 py-0.5 border border-slate-300 rounded">
+                    </div>
+                    <div>
+                        <span class="text-[9px] text-slate-400 block">Harga/Pcs</span>
+                        <input type="number" value="8000" min="0" step="500" oninput="kalkulasiTotalEditForm()" class="edit-item-harga w-full px-1.5 py-0.5 border border-slate-300 rounded font-semibold text-emerald-700">
+                    </div>
+                </div>
+            `;
+            container.appendChild(rowDiv);
+            if (window.lucide) lucide.createIcons();
+            kalkulasiTotalEditForm();
+        }
+
+        function hapusRowEditSatuan(btn) {
+            const rows = document.querySelectorAll('.edit-satuan-item-row');
+            if (rows.length <= 1) {
+                alert("Minimal harus ada 1 item barang!");
+                return;
+            }
+            btn.closest('.edit-satuan-item-row').remove();
+            kalkulasiTotalEditForm();
+        }
+
+        function kalkulasiTotalEditForm() {
+            const areaSatuan = document.getElementById('areaEditSatuanContainer');
+            if (!areaSatuan.classList.contains('hidden')) {
+                let grandTotal = 0;
+                const rows = document.querySelectorAll('.edit-satuan-item-row');
+                rows.forEach(r => {
+                    const pcs = parseFloat(r.querySelector('.edit-item-pcs').value) || 0;
+                    const harga = parseFloat(r.querySelector('.edit-item-harga').value) || 0;
+                    grandTotal += (pcs * harga);
+                });
+                document.getElementById('editTxTotal').value = grandTotal;
+            }
+        }
+
+        function tutupModalEditTransaksi() {
+            document.getElementById('modalEditTransaksi').classList.add('hidden');
+        }
+
+        function simpanPerubahanEditTx(e) {
+            e.preventDefault();
+            const id = parseInt(document.getElementById('editTxId').value);
+            const item = dataTransaksi.find(t => t.id === id);
+            if (!item) return;
+
+            item.nama = document.getElementById('editTxPelanggan').value;
+            item.tglMasuk = document.getElementById('editTxTglMasuk').value;
+            item.tglAmbil = document.getElementById('editTxTglAmbil').value;
+            item.total = parseFloat(document.getElementById('editTxTotal').value) || 0;
+            item.status = document.getElementById('editTxStatus').value;
+            item.isDiambil = document.getElementById('editTxIsDiambil').value === "true";
+
+            if (Array.isArray(item.itemsSatuan) && item.itemsSatuan.length > 0) {
+                const newItemsSatuan = [];
+                const rows = document.querySelectorAll('.edit-satuan-item-row');
+                rows.forEach(r => {
+                    const nama = r.querySelector('.edit-item-nama').value.trim() || 'Barang';
+                    const layanan = r.querySelector('.edit-item-layanan').value.trim() || 'Cuci';
+                    const pcs = parseFloat(r.querySelector('.edit-item-pcs').value) || 0;
+                    const harga = parseFloat(r.querySelector('.edit-item-harga').value) || 0;
+                    newItemsSatuan.push({ nama, layanan, pcs, harga });
+                });
+                item.itemsSatuan = newItemsSatuan;
+            } else {
+                item.layananNama = document.getElementById('editTxLayananNama').value.trim();
+                item.rincianPerhitungan = document.getElementById('editTxRincianPerhitungan').value.trim();
+            }
+
+            simpanKeLokal();
+            updateTransaksiCloud(item);
+
+            tutupModalEditTransaksi();
+            renderTabel();
+            renderDropdownPengambilan();
+            updateChartPelanggan();
+        }
+
+        function renderDropdownPengambilan() {
+            const select = document.getElementById('selectPelangganAmbil');
+            if (!select) return;
+
+            let antrean = dataTransaksi.filter(t => !t.isDiambil);
+
+            if (currentFilterAmbil !== 'semua') {
+                antrean = antrean.filter(t => t.status === currentFilterAmbil);
+            }
+
+            antrean.sort((a, b) => new Date(a.tglAmbil) - new Date(b.tglAmbil));
+
+            if (antrean.length === 0) {
+                select.innerHTML = `<option value="">-- Tidak ada cucian (${currentFilterAmbil}) --</option>`;
+                document.getElementById('cardDetailPengambilan').classList.add('hidden');
+                return;
+            }
+
+            select.innerHTML = `<option value="">-- Pilih Nama Pelanggan / Antrean --</option>` + antrean.map((item, idx) => {
+                const badgeBayar = item.status === 'Lunas' ? '✅ Lunas' : '⚠️ Belum Lunas';
+                const rincian = Array.isArray(item.itemsSatuan) 
+                    ? item.itemsSatuan.map(i => `${i.nama}`).join(', ')
+                    : item.layananNama;
+                return `<option value="${item.id}">${idx + 1}. [${badgeBayar}] ${item.nama} (#${item.id}) - Est: ${formatTglIndo(item.tglAmbil)} [${rincian}]</option>`;
+            }).join('');
+
+            tampilkanDetailPengambilanDropdown();
+        }
+
+        function tampilkanDetailPengambilanDropdown() {
+            const id = document.getElementById('selectPelangganAmbil').value;
+            const card = document.getElementById('cardDetailPengambilan');
+
+            if (!id) {
+                card.classList.add('hidden');
+                return;
+            }
+
+            const item = dataTransaksi.find(t => t.id == id);
+            if (!item) return;
+
+            let rincianHtml = '';
+            if (Array.isArray(item.itemsSatuan) && item.itemsSatuan.length > 0) {
+                rincianHtml = item.itemsSatuan.map(i => `<div>• ${i.nama} (${i.layanan}): ${i.pcs} Pcs @ Rp ${i.harga.toLocaleString('id-ID')}</div>`).join('');
+            } else {
+                rincianHtml = `<div>• ${item.rincianPerhitungan}</div>`;
+            }
+
+            const tombolAksi = item.status === 'Lunas'
+                ? `<button onclick="prosesPengambilan(${item.id})" class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-4 py-2 rounded-xl transition flex items-center gap-1.5 shadow">
+                        <i data-lucide="check" class="w-4 h-4"></i> Serahkan Cucian (Lunas)
+                   </button>`
+                : `<div class="flex gap-2">
+                        <button onclick="lunasiDanSerahkan(${item.id})" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs px-3 py-2 rounded-xl transition flex items-center gap-1 shadow">
+                            <i data-lucide="credit-card" class="w-4 h-4"></i> Pelunasan & Serahkan
+                        </button>
+                        <button onclick="prosesPengambilan(${item.id})" class="bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs px-3 py-2 rounded-xl transition flex items-center gap-1 shadow">
+                            <i data-lucide="arrow-right-circle" class="w-4 h-4"></i> Serahkan (Belum Lunas)
+                        </button>
+                   </div>`;
+
+            card.innerHTML = `
+                <div class="flex justify-between items-start border-b pb-2">
+                    <div>
+                        <div class="font-bold text-slate-800 text-base">${item.nama} <span class="text-xs text-slate-400">(#${item.id})</span></div>
+                        <div class="text-xs text-slate-500">Tgl Masuk: ${formatTglIndo(item.tglMasuk)} | Est. Ambil: <span class="font-bold text-emerald-600">${formatTglIndo(item.tglAmbil)}</span></div>
+                    </div>
+                    <span class="text-xs font-bold ${item.status === 'Lunas' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'} px-2.5 py-1 rounded-full">
+                        ${item.status}
+                    </span>
+                </div>
+                <div class="text-xs text-slate-600 space-y-1">
+                    <div class="font-semibold text-slate-700">Rincian Cucian:</div>
+                    ${rincianHtml}
+                </div>
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center border-t pt-2 gap-2">
+                    <div class="text-xs">Total Biaya: <span class="font-extrabold text-blue-700 text-sm">Rp ${item.total.toLocaleString('id-ID')}</span></div>
+                    ${tombolAksi}
+                </div>
+            `;
+
+            card.classList.remove('hidden');
+            if (window.lucide) lucide.createIcons();
+        }
+
+        function setTanggalDefault() {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('tglMasuk').value = today;
+            document.getElementById('pilihBulanArsip').value = today.substring(0, 7);
+            document.getElementById('rekapBulanInput').value = today.substring(0, 7);
+            
+            const listContainer = document.getElementById('listBarangSatuan');
+            if (listContainer && listContainer.children.length === 0) {
+                tambahBarangSatuan();
+            }
+            renderSelectLayananKiloan();
+            hitungEstimasiSelesai();
+            renderSelectPelanggan();
+        }
+
+        function tambahBarangSatuan() {
+            const container = document.getElementById('listBarangSatuan');
+            if (!container) return;
+            const rowId = Date.now() + Math.random();
+
+            const itemDiv = document.createElement('div');
+            itemDiv.className = "p-2.5 bg-white rounded-lg border border-slate-200 space-y-2 text-xs row-item-satuan";
+            itemDiv.setAttribute('data-id', rowId);
+
+            let opsikatalog = KATALOG_BARANG.map(k => {
+                const hDefault = k.harga['Cuci Komplit'] || 10000;
+                return `<option value="${k.nama}">${k.nama} (Rp ${hDefault.toLocaleString('id-ID')})</option>`;
+            }).join('');
+
+            let opsiLayananSatuan = LAYANAN_KILOAN.map(l => 
+                `<option value="${l.nama}" data-hari="${l.hari}">${l.nama} (${l.hari} Hari)</option>`
+            ).join('');
+
+            itemDiv.innerHTML = `
+                <div class="flex items-center gap-2">
+                    <select class="input-katalog-satuan flex-1 px-2.5 py-1.5 border border-slate-300 rounded focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white font-medium" onchange="sinkronisasiHargaItem(this)">
+                        ${opsikatalog}
+                    </select>
+                    <button type="button" onclick="hapusBarangSatuan(this)" class="text-slate-400 hover:text-red-500 transition p-1">
+                        <i data-lucide="x" class="w-4 h-4"></i>
+                    </button>
+                </div>
+                <div class="input-nama-custom-container hidden">
+                    <input type="text" placeholder="Ketik nama barang custom..." class="input-nama-custom w-full px-2.5 py-1 border border-slate-300 rounded focus:outline-none">
+                </div>
+                <div>
+                    <span class="text-[10px] text-slate-400 block mb-0.5">Jenis Layanan Satuan</span>
+                    <select class="input-layanan-satuan w-full px-2.5 py-1 border border-slate-300 rounded focus:outline-none bg-white font-medium text-slate-700" onchange="sinkronisasiHargaItem(this)">
+                        ${opsiLayananSatuan}
+                    </select>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <div>
+                        <span class="text-[10px] text-slate-400 block mb-0.5">Qty (Pcs)</span>
+                        <input type="number" min="1" value="1" oninput="updateEstimasiDanTotal()" class="input-pcs-satuan w-full px-2.5 py-1 border border-slate-300 rounded focus:outline-none">
+                    </div>
+                    <div>
+                        <span class="text-[10px] text-slate-400 block mb-0.5">Harga / Pcs (Rp)</span>
+                        <input type="number" min="0" value="8000" step="1000" oninput="updateEstimasiDanTotal()" class="input-harga-satuan w-full px-2.5 py-1 border border-slate-300 rounded font-semibold text-emerald-700 focus:outline-none">
+                    </div>
+                </div>
+            `;
+
+            container.appendChild(itemDiv);
+            if (window.lucide) lucide.createIcons();
+            
+            const selKatalog = itemDiv.querySelector('.input-katalog-satuan');
+            sinkronisasiHargaItem(selKatalog);
+        }
+
+        function sinkronisasiHargaItem(elementInRow) {
+            const row = elementInRow.closest('.row-item-satuan');
+            const selKatalog = row.querySelector('.input-katalog-satuan');
+            const selLayanan = row.querySelector('.input-layanan-satuan');
+            const hargaInput = row.querySelector('.input-harga-satuan');
+            const customContainer = row.querySelector('.input-nama-custom-container');
+
+            const namaBarang = selKatalog.value;
+            const jenisLayanan = selLayanan.value;
+
+            if (namaBarang.includes('Custom')) {
+                customContainer.classList.remove('hidden');
+            } else {
+                customContainer.classList.add('hidden');
+                const itemData = KATALOG_BARANG.find(k => k.nama === namaBarang);
+                if (itemData && itemData.harga && itemData.harga[jenisLayanan] !== undefined) {
+                    hargaInput.value = itemData.harga[jenisLayanan];
+                } else if (itemData && itemData.harga['Cuci Komplit']) {
+                    hargaInput.value = itemData.harga['Cuci Komplit'];
+                }
+            }
+
+            updateEstimasiDanTotal();
+        }
+
+        function hapusBarangSatuan(btn) {
+            const container = document.getElementById('listBarangSatuan');
+            if (container.children.length <= 1) {
+                alert('Minimal harus ada 1 item barang!');
+                return;
+            }
+            btn.closest('.row-item-satuan').remove();
+            updateEstimasiDanTotal();
+        }
+
+        function toggleTipeHitung() {
+            const tipe = document.querySelector('input[name="tipeHitung"]:checked').value;
+            const cKiloan = document.getElementById('containerKiloan');
+            const cSatuan = document.getElementById('containerSatuan');
+
+            if (tipe === 'satuan') {
+                cSatuan.classList.remove('hidden');
+                cKiloan.classList.add('hidden');
+            } else {
+                cSatuan.classList.add('hidden');
+                cKiloan.classList.remove('hidden');
+            }
+            updateEstimasiDanTotal();
+        }
+
+        function hitungEstimasiSelesai() {
+            const tglMasukVal = document.getElementById('tglMasuk').value;
+            if (!tglMasukVal) return;
+
+            const tipe = document.querySelector('input[name="tipeHitung"]:checked').value;
+            let estimasiHari = 1;
+
+            if (tipe === 'kiloan') {
+                const layananSelect = document.getElementById('layananKiloan');
+                estimasiHari = parseInt(layananSelect.options[layananSelect.selectedIndex]?.getAttribute('data-hari')) || 1;
+            } else {
+                const rows = document.querySelectorAll('.row-item-satuan');
+                rows.forEach(row => {
+                    const sel = row.querySelector('.input-layanan-satuan');
+                    const h = parseInt(sel.options[sel.selectedIndex]?.getAttribute('data-hari')) || 1;
+                    if (h > estimasiHari) estimasiHari = h;
+                });
+            }
+
+            const tglMasuk = new Date(tglMasukVal);
+            tglMasuk.setDate(tglMasuk.getDate() + estimasiHari);
+
+            document.getElementById('tglAmbil').value = tglMasuk.toISOString().split('T')[0];
+        }
+
+        function hitungTotal() {
+            const tipe = document.querySelector('input[name="tipeHitung"]:checked').value;
+            let total = 0;
+            const labelLive = document.getElementById('labelRincianLive');
+
+            if (tipe === 'kiloan') {
+                const harga = parseFloat(document.getElementById('layananKiloan').value) || 0;
+                const kg = parseFloat(document.getElementById('jumlahKg').value) || 0;
+                total = harga * kg;
+                labelLive.innerText = `Rincian: ${kg} Kg x Rp ${harga.toLocaleString('id-ID')}`;
+            } else {
+                const rows = document.querySelectorAll('.row-item-satuan');
+                let totalPcs = 0;
+                rows.forEach(row => {
+                    const pcs = parseFloat(row.querySelector('.input-pcs-satuan').value) || 0;
+                    const harga = parseFloat(row.querySelector('.input-harga-satuan').value) || 0;
+                    total += (pcs * harga);
+                    totalPcs += pcs;
+                });
+                labelLive.innerText = `Rincian: ${rows.length} Jenis Barang (${totalPcs} Pcs)`;
+            }
+
+            document.getElementById('totalPreview').innerText = `Rp ${total.toLocaleString('id-ID')}`;
+            return total;
+        }
+
+        function updateEstimasiDanTotal() {
+            hitungTotal();
+            hitungEstimasiSelesai();
+        }
+
+        function formatTglIndo(stringTanggal) {
+            if (!stringTanggal) return '-';
+            const [year, month, day] = stringTanggal.split('-');
+            return `${day}/${month}/${year}`;
+        }
+
+        function hitungRingkasanPendapatan() {
+            let totalLunas = 0;
+            let totalBelumLunas = 0;
+
+            dataTransaksi.forEach(item => {
+                if (item.status === 'Lunas') {
+                    totalLunas += item.total;
+                } else {
+                    totalBelumLunas += item.total;
+                }
+            });
+
+            const totalOmset = totalLunas + totalBelumLunas;
+
+            document.getElementById('statPendapatanLunas').innerText = `Rp ${totalLunas.toLocaleString('id-ID')}`;
+            document.getElementById('statBelumLunas').innerText = `Rp ${totalBelumLunas.toLocaleString('id-ID')}`;
+            document.getElementById('statTotalOmset').innerText = `Rp ${totalOmset.toLocaleString('id-ID')}`;
+        }
+
+        function renderAntreanKerja() {
+            const container = document.getElementById('daftarAntreanContainer');
+            const badge = document.getElementById('jumlahAntreanBadge');
+            if (!container) return;
+
+            let antrean = dataTransaksi.filter(t => !t.isDiambil);
+            antrean.sort((a, b) => new Date(a.tglAmbil) - new Date(b.tglAmbil));
+
+            badge.innerText = `${antrean.length} Antrean`;
+
+            if (antrean.length === 0) {
+                container.innerHTML = `<p class="col-span-full text-xs text-amber-600 text-center py-6 bg-amber-100/50 rounded-xl">Semua cucian sudah selesai diserahkan! 🎉</p>`;
+                return;
+            }
+
+            const today = new Date().toISOString().split('T')[0];
+
+            container.innerHTML = antrean.map((item, index) => {
+                let badgeStatusWaktu = '';
+                if (item.tglAmbil < today) {
+                    badgeStatusWaktu = `<span class="bg-rose-100 text-rose-700 text-[10px] font-extrabold px-2 py-0.5 rounded">TERLAMBAT</span>`;
+                } else if (item.tglAmbil === today) {
+                    badgeStatusWaktu = `<span class="bg-amber-100 text-amber-800 text-[10px] font-extrabold px-2 py-0.5 rounded">AMBIL HARI INI</span>`;
+                } else {
+                    badgeStatusWaktu = `<span class="bg-slate-200 text-slate-700 text-[10px] font-semibold px-2 py-0.5 rounded">Selesai ${formatTglIndo(item.tglAmbil)}</span>`;
+                }
+
+                const rincianText = Array.isArray(item.itemsSatuan) 
+                    ? item.itemsSatuan.map(i => `${i.nama} (${i.pcs} Pcs)`).join(', ')
+                    : item.rincianPerhitungan;
+
+                return `
+                    <div class="bg-white p-3.5 rounded-xl border border-amber-200 shadow-sm flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <span class="w-6 h-6 rounded-full bg-amber-500 text-white font-bold text-xs flex items-center justify-center shrink-0">${index + 1}</span>
+                            <div>
+                                <div class="font-bold text-xs text-slate-800">${item.nama} <span class="font-normal text-slate-400">(#${item.id})</span></div>
+                                <div class="text-[11px] text-slate-500">${item.layananNama}</div>
+                                <div class="text-[10px] text-emerald-700 font-medium">${rincianText}</div>
+                            </div>
+                        </div>
+                        <div class="text-right shrink-0">
+                            ${badgeStatusWaktu}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function renderTabel() {
+            const tbody = document.getElementById('tabelBody');
+            if (!tbody) return;
+            tbody.innerHTML = '';
+            const filter = document.getElementById('filterStatus').value;
+
+            let filteredData = dataTransaksi.filter(item => {
+                if (filter === 'semua') return true;
+                if (filter === 'Selesai') return item.isDiambil === true;
+                return item.status === filter;
+            });
+
+            const limitedData = filteredData.slice(0, 50);
+
+            if (limitedData.length === 0) {
+                tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="text-center py-8 text-slate-400">
+                            Data transaksi tidak ditemukan.
+                        </td>
+                    </tr>
+                `;
+            } else {
+                limitedData.forEach((item) => {
+                    const tr = document.createElement('tr');
+                    tr.className = "hover:bg-slate-50 transition";
+
+                    let statusBayarBadge = '';
+                    if (item.status === 'Lunas') {
+                        statusBayarBadge = `<span class="bg-emerald-100 text-emerald-700 text-xs px-2.5 py-1 rounded-full font-semibold">Lunas</span>`;
+                    } else {
+                        statusBayarBadge = `
+                            <div class="flex flex-col items-center gap-1">
+                                <span class="bg-amber-100 text-amber-700 text-xs px-2 py-0.5 rounded-full font-semibold">Belum Lunas</span>
+                                <button onclick="lunasiTagihan(${item.id})" class="text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2 py-0.5 rounded shadow transition">
+                                    Pelunasan
+                                </button>
+                            </div>
+                        `;
+                    }
+
+                    const statusAmbilBadge = item.isDiambil 
+                        ? `<span class="bg-slate-100 text-slate-600 text-xs px-2.5 py-1 rounded-full font-medium">📦 Sudah Diambil</span>`
+                        : `<span class="bg-blue-100 text-blue-700 text-xs px-2.5 py-1 rounded-full font-medium">⏳ Diproses</span>`;
+
+                    let rincianTabelHtml = '';
+                    if (Array.isArray(item.itemsSatuan) && item.itemsSatuan.length > 0) {
+                        rincianTabelHtml = item.itemsSatuan.map(i => `<div>• ${i.nama} [${i.layanan}]: ${i.pcs} Pcs @ Rp ${i.harga.toLocaleString('id-ID')}</div>`).join('');
+                    } else {
+                        rincianTabelHtml = `<div>${item.rincianPerhitungan}</div>`;
+                    }
+
+                    tr.innerHTML = `
+                        <td class="py-3 px-3">
+                            <div class="font-semibold text-slate-800">${item.nama}</div>
+                            <div class="text-xs text-slate-400">#${item.id}</div>
+                            <div class="text-xs text-slate-600 font-medium">${item.layananNama}</div>
+                        </td>
+                        <td class="py-3 px-3">
+                            <div class="text-xs text-slate-500">Masuk: <span class="font-medium text-slate-700">${formatTglIndo(item.tglMasuk)}</span></div>
+                            <div class="text-xs text-emerald-600 font-semibold">Est: ${formatTglIndo(item.tglAmbil)}</div>
+                        </td>
+                        <td class="py-3 px-3 text-right">
+                            <div class="font-bold text-slate-700">Rp ${item.total.toLocaleString('id-ID')}</div>
+                            <div class="text-[11px] text-slate-400 font-normal">${rincianTabelHtml}</div>
+                        </td>
+                        <td class="py-3 px-3 text-center">${statusBayarBadge}</td>
+                        <td class="py-3 px-3 text-center">${statusAmbilBadge}</td>
+                        <td class="py-3 px-3 text-center">
+                            <div class="flex items-center justify-center gap-1.5">
+                                <button onclick="bukaModalNota(${item.id})" class="p-1 text-emerald-700 hover:text-emerald-900 transition rounded hover:bg-emerald-50" title="Cetak Nota">
+                                    <i data-lucide="printer" class="w-4 h-4"></i>
+                                </button>
+                                <button onclick="bukaModalEditTransaksi(${item.id})" class="p-1 text-blue-600 hover:text-blue-800 transition rounded hover:bg-blue-50" title="Edit Transaksi">
+                                    <i data-lucide="edit" class="w-4 h-4"></i>
+                                </button>
+                                <button onclick="hapusSatu(${item.id})" class="p-1 text-slate-400 hover:text-rose-600 transition rounded hover:bg-rose-50" title="Hapus Transaksi">
+                                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                </button>
+                            </div>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+            }
+
+            hitungRingkasanPendapatan();
+            renderAntreanKerja();
+            if (window.lucide) lucide.createIcons();
+        }
+
+        function generateNotaRekapBulanan() {
+            const pelanggan = document.getElementById('rekapPelangganSelect').value;
+            const bulanThn = document.getElementById('rekapBulanInput').value;
+
+            if (!bulanThn) {
+                alert("Silakan pilih Bulan & Tahun terlebih dahulu!");
+                return;
+            }
+
+            let txBulan = dataTransaksi.filter(t => t.tglMasuk && t.tglMasuk.startsWith(bulanThn));
+
+            if (pelanggan !== "SEMUA_PELANGGAN") {
+                txBulan = txBulan.filter(t => t.nama === pelanggan);
+            }
+
+            if (txBulan.length === 0) {
+                const labelPelanggan = pelanggan === "SEMUA_PELANGGAN" ? "semua pelanggan" : `pelanggan "${pelanggan}"`;
+                alert(`Tidak ditemukan riwayat transaksi untuk ${labelPelanggan} pada bulan ${bulanThn}`);
+                return;
+            }
+
+            let totalLunas = 0;
+            let totalBelumLunas = 0;
+
+            const listContainer = document.getElementById('rekapNotaRincianList');
+            listContainer.innerHTML = txBulan.map(t => {
+                if (t.status === 'Lunas') {
+                    totalLunas += t.total;
+                } else {
+                    totalBelumLunas += t.total;
+                }
+
+                const statusTag = t.status === 'Lunas' 
+                    ? `<span class="text-emerald-600 font-bold">[LUNAS]</span>` 
+                    : `<span class="text-amber-600 font-bold">[BELUM LUNAS]</span>`;
+
+                return `
+                    <div class="flex justify-between border-b border-slate-100 pb-1">
+                        <div>
+                            <div class="font-bold text-slate-800">#${t.id} - ${t.nama} (${formatTglIndo(t.tglMasuk)}) ${statusTag}</div>
+                            <div class="text-[10px] text-slate-500">${t.layananNama}</div>
+                        </div>
+                        <span class="font-semibold self-end">Rp ${t.total.toLocaleString('id-ID')}</span>
+                    </div>
+                `;
+            }).join('');
+
+            const grandTotal = totalLunas + totalBelumLunas;
+            const [year, month] = bulanThn.split('-');
+            const namaBulan = new Date(year, month - 1).toLocaleString('id-ID', { month: 'long', year: 'numeric' });
+
+            const namaLabelTampil = pelanggan === "SEMUA_PELANGGAN" ? "TOTAL (SEMUA PELANGGAN)" : pelanggan;
+
+            document.getElementById('rekapNotaNama').innerText = namaLabelTampil;
+            document.getElementById('rekapNotaBulan').innerText = namaBulan;
+            document.getElementById('rekapNotaJumlahTx').innerText = `${txBulan.length} Transaksi`;
+            document.getElementById('rekapNotaTotalLunas').innerText = `Rp ${totalLunas.toLocaleString('id-ID')}`;
+            document.getElementById('rekapNotaTotalBelumLunas').innerText = `Rp ${totalBelumLunas.toLocaleString('id-ID')}`;
+            document.getElementById('rekapNotaGrandTotal').innerText = `Rp ${grandTotal.toLocaleString('id-ID')}`;
+
+            document.getElementById('modalNotaRekap').classList.remove('hidden');
+            if (window.lucide) lucide.createIcons();
+        }
+
+        function tutupModalNotaRekap() {
+            document.getElementById('modalNotaRekap').classList.add('hidden');
+        }
+
+        function unduhNotaRekapGambar() {
+            const areaNota = document.getElementById('areaNotaRekapPrint');
+            const areaTombol = document.getElementById('areaTombolNotaRekap');
+            const pelanggan = document.getElementById('rekapNotaNama').innerText;
+
+            areaTombol.style.display = 'none';
+
+            html2canvas(areaNota, {
+                scale: 2,
+                backgroundColor: "#ffffff"
+            }).then(canvas => {
+                areaTombol.style.display = 'flex';
+
+                const link = document.createElement('a');
+                link.download = `Struk_Rekap_${pelanggan.replace(/\s+/g, '_')}.png`;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            }).catch(err => {
+                areaTombol.style.display = 'flex';
+                alert('Gagal mengunduh gambar struk rekap.');
+            });
+        }
+
+        function bukaModalNota(id) {
+            const item = dataTransaksi.find(t => t.id === id);
+            if (!item) return;
+
+            document.getElementById('notaId').innerText = `#${item.id}`;
+            document.getElementById('notaTglMasuk').innerText = formatTglIndo(item.tglMasuk);
+            document.getElementById('notaTglAmbil').innerText = formatTglIndo(item.tglAmbil);
+            document.getElementById('notaNama').innerText = item.nama;
+            document.getElementById('notaLayanan').innerText = item.layananNama;
+
+            const rincianNotaContainer = document.getElementById('notaRincianHitung');
+            if (Array.isArray(item.itemsSatuan) && item.itemsSatuan.length > 0) {
+                rincianNotaContainer.innerHTML = item.itemsSatuan.map(i => `
+                    <div class="flex justify-between border-b border-dashed border-slate-200 pb-1">
+                        <div>
+                            <div class="font-bold text-slate-700">${i.nama}</div>
+                            <div class="text-[10px] text-slate-500">${i.layanan} • ${i.pcs} Pcs @ Rp ${i.harga.toLocaleString('id-ID')}</div>
+                        </div>
+                        <span class="font-semibold self-end">Rp ${(i.pcs * i.harga).toLocaleString('id-ID')}</span>
+                    </div>
+                `).join('');
+            } else {
+                rincianNotaContainer.innerText = item.rincianPerhitungan;
+            }
+
+            document.getElementById('notaTotalItem').innerText = `Rp ${item.total.toLocaleString('id-ID')}`;
+            document.getElementById('notaTotalBayar').innerText = `Rp ${item.total.toLocaleString('id-ID')}`;
+            document.getElementById('notaStatusBayar').innerText = item.status;
+
+            document.getElementById('modalNota').classList.remove('hidden');
+            if (window.lucide) lucide.createIcons();
+        }
+
+        function tutupModalNota() {
+            document.getElementById('modalNota').classList.add('hidden');
+        }
+
+        function eksekusiCetak() {
+            window.print();
+        }
+
+        function unduhNotaGambar() {
+            const areaNota = document.getElementById('areaNotaPrint');
+            const areaTombol = document.getElementById('areaTombolNota');
+            const notaId = document.getElementById('notaId').innerText;
+
+            areaTombol.style.display = 'none';
+
+            html2canvas(areaNota, {
+                scale: 2,
+                backgroundColor: "#ffffff"
+            }).then(canvas => {
+                areaTombol.style.display = 'flex';
+
+                const link = document.createElement('a');
+                link.download = `Struk_Laundry_${notaId}.png`;
+                link.href = canvas.toDataURL('image/png');
+                link.click();
+            }).catch(err => {
+                areaTombol.style.display = 'flex';
+                alert('Gagal mengunduh gambar struk.');
+            });
+        }
+
+        function unduhLaporanCSV() {
+            const bulanPilihan = document.getElementById('pilihBulanArsip').value;
+            if (!bulanPilihan) {
+                alert('Silakan pilih bulan dan tahun terlebih dahulu!');
+                return;
+            }
+
+            const dataBulanIni = dataTransaksi.filter(t => t.tglMasuk && t.tglMasuk.startsWith(bulanPilihan));
+
+            if (dataBulanIni.length === 0) {
+                alert(`Tidak ada transaksi ditemukan untuk bulan ${bulanPilihan}`);
+                return;
+            }
+
+            let csvContent = "\uFEFF";
+            csvContent += "ID Transaksi;Tanggal Masuk;Tanggal Ambil;Nama Pelanggan;Layanan/Item;Rincian Perhitungan;Total (Rp);Status Bayar;Status Cucian\n";
+
+            dataBulanIni.forEach(t => {
+                const statusCucian = t.isDiambil ? "Sudah Diambil" : "Diproses";
+                const rincianCsv = Array.isArray(t.itemsSatuan) 
+                    ? t.itemsSatuan.map(i => `${i.nama} [${i.layanan}] (${i.pcs} Pcs @ Rp ${i.harga})`).join(' | ')
+                    : t.rincianPerhitungan;
+
+                csvContent += `${t.id};${t.tglMasuk};${t.tglAmbil};"${t.nama}";"${t.layananNama}";"${rincianCsv}";${t.total};${t.status};${statusCucian}\n`;
+            });
+
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", `Laporan_Laundry_${bulanPilihan}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function cariPengambilan() {
+            const keyword = document.getElementById('inputCariPengambilan').value.toLowerCase().trim();
+            const container = document.getElementById('hasilPencarianAmbil');
+
+            if (!keyword) {
+                container.classList.add('hidden');
+                return;
+            }
+
+            const hasil = dataTransaksi.filter(item => 
+                item.nama.toLowerCase().includes(keyword) || 
+                item.id.toString() === keyword
+            );
+
+            if (hasil.length === 0) {
+                container.innerHTML = `<p class="text-slate-400 text-xs text-center py-2">Pesanan tidak ditemukan</p>`;
+            } else {
+                container.innerHTML = hasil.map(item => `
+                    <div class="p-3 bg-slate-50 rounded-xl border border-slate-200 flex items-center justify-between">
+                        <div>
+                            <div class="font-bold text-slate-800">${item.nama} <span class="text-xs font-normal text-slate-400">(#${item.id})</span></div>
+                            <div class="text-xs text-slate-600 font-medium">${item.layananNama}</div>
+                            <div class="text-[11px] text-slate-500">Total Biaya: Rp ${item.total.toLocaleString('id-ID')}</div>
+                            <div class="text-xs font-semibold ${item.status === 'Lunas' ? 'text-emerald-600' : 'text-amber-600'}">
+                                Status: ${item.status}
+                            </div>
+                        </div>
+                        <div>
+                            ${item.isDiambil 
+                                ? `<span class="text-xs font-bold text-slate-400 bg-slate-200 px-3 py-1.5 rounded-lg">Sudah Diambil</span>`
+                                : `<button onclick="prosesPengambilan(${item.id})" class="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs px-3.5 py-2 rounded-xl transition flex items-center gap-1 shadow">
+                                    <i data-lucide="check" class="w-4 h-4"></i> Serahkan
+                                   </button>`
+                            }
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            container.classList.remove('hidden');
+            if (window.lucide) lucide.createIcons();
+        }
+
+        function prosesPengambilan(id) {
+            const item = dataTransaksi.find(t => t.id === id);
+            if (!item) return;
+
+            if (item.status !== 'Lunas') {
+                if (!confirm(`⚠️ CATATAN: Tagihan Rp ${item.total.toLocaleString('id-ID')} atas nama ${item.nama} BELUM LUNAS.\n\nSerahkan barang sekarang tanpa pelunasan?`)) {
+                    return;
+                }
+            }
+
+            item.isDiambil = true;
+            item.tglRealisasiAmbil = new Date().toISOString().split('T')[0];
+
+            simpanKeLokal();
+            updateTransaksiCloud(item);
+            
+            document.getElementById('inputCariPengambilan').value = '';
+            document.getElementById('hasilPencarianAmbil').classList.add('hidden');
+            renderTabel();
+            renderDropdownPengambilan();
+            updateChartPelanggan();
+        }
+
+        function lunasiDanSerahkan(id) {
+            const item = dataTransaksi.find(t => t.id === id);
+            if (!item) return;
+
+            if (confirm(`Pelunasan tagihan Rp ${item.total.toLocaleString('id-ID')} dan serahkan cucian untuk pelanggan: ${item.nama}?`)) {
+                item.status = 'Lunas';
+                item.isDiambil = true;
+                item.tglRealisasiAmbil = new Date().toISOString().split('T')[0];
+
+                simpanKeLokal();
+                updateTransaksiCloud(item);
+                renderTabel();
+                renderDropdownPengambilan();
+                updateChartPelanggan();
+            }
+        }
+
+        function lunasiTagihan(id) {
+            const item = dataTransaksi.find(t => t.id === id);
+            if (!item) return;
+
+            if (confirm(`Pelunasan tagihan Rp ${item.total.toLocaleString('id-ID')} untuk pelanggan: ${item.nama}?`)) {
+                item.status = 'Lunas';
+                simpanKeLokal();
+                updateTransaksiCloud(item);
+                renderTabel();
+                renderDropdownPengambilan();
+                updateChartPelanggan();
+            }
+        }
+
+        function hapusSatu(id) {
+            const item = dataTransaksi.find(t => t.id === id);
+            if (!item) return;
+
+            if (confirm(`Apakah Anda YAKIN ingin menghapus transaksi #${id} atas nama ${item.nama}?`)) {
+                dataTransaksi = dataTransaksi.filter(t => t.id !== id);
+                simpanKeLokal();
+                hapusTransaksiCloud(id);
+                renderTabel();
+                renderDropdownPengambilan();
+                updateChartPelanggan();
+            }
+        }
+
+        document.getElementById('laundryForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            const tipe = document.querySelector('input[name="tipeHitung"]:checked').value;
+            let layananNama = '';
+            let rincianPerhitungan = '';
+            let itemsSatuan = null;
+
+            if (tipe === 'kiloan') {
+                const layananSelect = document.getElementById('layananKiloan');
+                const harga = parseFloat(layananSelect.value);
+                layananNama = layananSelect.options[layananSelect.selectedIndex].text.split(' (')[0];
+                const kg = parseFloat(document.getElementById('jumlahKg').value);
+                rincianPerhitungan = `${kg} Kg x Rp ${harga.toLocaleString('id-ID')}`;
+            } else {
+                layananNama = 'Cucian Satuan (Multi-Item)';
+                itemsSatuan = [];
+                const rows = document.querySelectorAll('.row-item-satuan');
+
+                rows.forEach(row => {
+                    const selKatalog = row.querySelector('.input-katalog-satuan');
+                    let nama = selKatalog.value;
+                    if (nama.includes('Custom')) {
+                        nama = row.querySelector('.input-nama-custom').value.trim() || 'Barang Custom';
+                    }
+                    const layananSelect = row.querySelector('.input-layanan-satuan');
+                    const layanan = layananSelect.value;
+                    const pcs = parseFloat(row.querySelector('.input-pcs-satuan').value) || 0;
+                    const harga = parseFloat(row.querySelector('.input-harga-satuan').value) || 0;
+                    itemsSatuan.push({ nama, layanan, pcs, harga });
+                });
+            }
+
+            const namaPelanggan = document.getElementById('selectPelanggan').value;
+
+            const transaksiBaru = {
+                id: Math.floor(1000 + Math.random() * 9000),
+                nama: namaPelanggan,
+                layananNama: layananNama,
+                rincianPerhitungan: rincianPerhitungan,
+                itemsSatuan: itemsSatuan,
+                tglMasuk: document.getElementById('tglMasuk').value,
+                tglAmbil: document.getElementById('tglAmbil').value,
+                total: hitungTotal(),
+                status: document.getElementById('status').value,
+                isDiambil: false,
+                tglRealisasiAmbil: null
+            };
+
+            dataTransaksi.unshift(transaksiBaru);
+            simpanKeLokal();
+            simpanTransaksiCloud(transaksiBaru);
+
+            this.reset();
+            setTanggalDefault();
+            toggleTipeHitung();
+            renderTabel();
+            updateChartPelanggan();
+
+            bukaModalNota(transaksiBaru.id);
+        });
+
+        // REGISTER SERVICE WORKER DYNAMIC UNTUK FULL OFFLINE APP
+        if ('serviceWorker' in navigator) {
+            const swCode = `
+                const CACHE_NAME = 'berkah-laundry-v1';
+                self.addEventListener('install', e => {
+                    e.waitUntil(
+                        caches.open(CACHE_NAME).then(cache => {
+                            return cache.addAll(['./']);
+                        })
+                    );
+                });
+                self.addEventListener('fetch', e => {
+                    e.respondWith(
+                        caches.match(e.request).then(response => {
+                            return response || fetch(e.request).catch(() => caches.match('./'));
+                        })
+                    );
+                });
+            `;
+            const blob = new Blob([swCode], { type: 'application/javascript' });
+            const swUrl = URL.createObjectURL(blob);
+            navigator.serviceWorker.register(swUrl).catch(() => {});
+        }
+
+        // EVENT LISTENER DETEKSI INTERNET AUTOMATIC
+        window.addEventListener('online', () => {
+            tampilkanStatusSync("🌐 Terhubung ke Internet! Melakukan Sinkronisasi Otomatis...", "success");
+        });
+
+        window.addEventListener('offline', () => {
+            tampilkanStatusSync("📡 Koneksi Terputus. Aplikasi Berjalan Penuh dalam Mode Offline.", "warning");
+            perbaruiIndikatorStatus();
+        });
+
+        // Inisialisasi Pertama
+        setTanggalDefault();
+        muatDataFirebase();
+    </script>
+</body>
+</html>
